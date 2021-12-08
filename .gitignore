@@ -1,0 +1,8 @@
+.idea
+legodnn/data/datasets
+example/anomaly_detection/legodnn-blocks
+example/image_classification/legodnn-blocks
+example/*/log
+legodnn/__pycache__
+source-code-line-num.csv
+source-code-stats.py
