@@ -142,16 +142,6 @@ if __name__ == '__main__':
 |`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
 
 
-
-
-通过命令行
-```shell
-legodnn extract_block -model_dir model_dir -block_manager block_manager -model_manager model_manager 
-```
-
-
-
-
 ## 开源许可证
 
 该项目采用 [Apache 2.0 开源许可证](LICENSE)。
