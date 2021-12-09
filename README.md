@@ -26,9 +26,9 @@
     
     本项目实现了通用的块的抽取算法（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)），对于图像分类、目标检测、语义分割、姿态估计、行为识别、异常检测等类型的模型均可以通过算法，自动找出其中的块用于再训练。
 
-## 项目整体架构
-<div align="center">
-<img src="https://user-images.githubusercontent.com/20336673/145038154-e698821f-5d42-4457-a4cb-9bf412959365.png" width="500"/>
+**项目整体架构**
+<div align="left" padding="10">
+ <img src="https://user-images.githubusercontent.com/20336673/145038154-e698821f-5d42-4457-a4cb-9bf412959365.png" width="500"/>
 </div>
 
 - **common**：主要是对块的管理以及模型的管理，以便于离线阶段和在线阶段的使用。
