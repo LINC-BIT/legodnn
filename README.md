@@ -19,7 +19,8 @@
 
 ## 简介
 
-  LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一个针对模型缩放问题的轻量级、块粒度、可伸缩的解决方案。本项目是一个对LegoDNN的基于PyTorch的实现。
+  LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一个针对模型缩放问题的轻量级、块粒度、可伸缩的解决方案。从原始DNN模型中抽取块，生成稀疏派生块，然后对这些块进行再训练。通过组合这些块，扩大原始模型的伸缩选项。并且在运行时，通过算法对块的选择进行了优化。
+  本项目是一个对LegoDNN的基于PyTorch的实现。
  <div align="center" padding="10">
    <img src="https://user-images.githubusercontent.com/73862727/145767343-1cddf0f4-a9a9-48ef-8884-57688883e167.png" height=375/>
  </div>
@@ -38,9 +39,17 @@
  <img src="https://user-images.githubusercontent.com/73862727/145950613-fb0e96d5-3624-4de0-b371-ba0225bf56b3.png" height=375/>
 </div>
 
-- **common**：主要是对块的管理以及模型的管理，以便于离线阶段和在线阶段的使用。
-  - modelmanager：主要负责中间数据的生成以及获取模型的总精度和总延迟。对于不同的模型，这些功能的实现或有些许不一样，需要基于AbstractModelManager来针对不同的模型进行实现。
-  - blockmanager：主要负责块的抽取，更换，存储等，本项目已经通过AutoBlockManager实现针对多种模型自动对块的抽取,其算法原理详情见[文章]()。
+**处理流程**主要分为离线阶段和在线阶段。
+
+离线阶段：
+- 原始模型通过block extrator抽取出模型中的原始块，然后将这些块通过`decendant block generator`生成稀疏派生块，然后用retrain模块将这些块根据原始数据在原始模型中产生的中间数据进行再训练。最后将原始块以及所有的再生块通过`block profiler`对块进行精度和内存的分析，生成分析文件。
+
+在线阶段：
+- 在线阶段首先对离线阶段产生的块进行延迟分析和估计，生成延迟评估文件，然后`scailing optimizer`根据延迟评估文件以及离线阶段生成的块的精度分析文件和内存分析文件在运行时根据算法选择最优的块交给`block swicher`进行切换。
+
+
+**具体模块说明**
+- blockmanager：在本框架中通过blockmanager融合了`block extrator`、`descendant block generator`、`block swicher`的功能，主要负责块的抽取，派生，更换，存储等，本项目已经通过AutoBlockManager实现针对多种模型自动对块的抽取,其算法原理详情见[文章]()。
 - **offline**：在离线阶段对块进行再训练以提升其精度，并分析每个块的指标。
   - retrain：属于离线阶段对块的再训练。
   - Profile：属于离线阶段对块的大小、精度等信息进行分析统计。
