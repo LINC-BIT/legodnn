@@ -67,7 +67,7 @@ pip install legodnn
 ```
 ## 开始使用
 
-离线阶段
+**离线阶段**
 1. 引入组件，初始化随机种子
 ```python
 import torch
