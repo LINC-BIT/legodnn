@@ -35,8 +35,9 @@
     本项目实现了通用的块的抽取算法（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)），对于图像分类、目标检测、语义分割、姿态估计、行为识别、异常检测等类型的模型均可以通过算法，自动找出其中的块用于再训练。
 
 ## 项目整体架构
+
 <div align="center" padding="10">
- <img src="https://user-images.githubusercontent.com/73862727/145950613-fb0e96d5-3624-4de0-b371-ba0225bf56b3.png" height=375/>
+ <img src="https://user-images.githubusercontent.com/73862727/146190146-32de7e60-1406-4f68-8645-f39854b5dc29.png" height=375/>
 </div>
 
 **处理流程**主要分为离线阶段和在线阶段。
@@ -51,11 +52,11 @@
 **具体模块说明**
 - blockmanager：在本框架中通过blockmanager融合了`block extrator`、`descendant block generator`、`block swicher`的功能，主要负责块的抽取，派生，更换，存储等，本项目已经通过AutoBlockManager实现针对多种模型自动对块的抽取,其算法原理详情见[文章]()。
 - **offline**：在离线阶段对块进行再训练以提升其精度，并分析每个块的指标。
-  - retrain：属于离线阶段对块的再训练。
-  - Profile：属于离线阶段对块的大小、精度等信息进行分析统计。
+  - BlockRetrainer：用于对块的再训练。
+  - BlockProfile：用于对块的大小、精度等信息进行分析统计。
 - **online**：在线阶段主要是负责分析块与边缘设备相关的指标以及在线运行时针对特定的内存、精度限定对块进行热更新以进行优化。
-  - LatencyProfile：属于在线阶段对块在边缘设备上进行延迟数据的分析。
-  - RuntimeOptimizer：属于在线阶段运行期间根据特定内存大小对块进行热更新。
+  - LatencyProfile：用于对块在边缘设备上进行延迟数据的分析。
+  - ScailingOptimizer：用于根据特定内存大小对块进行优化热更新。
 
 ## 安装
 
@@ -64,88 +65,162 @@
 ```shell
 pip install legodnn
 ```
-简单的例子
+## 开始使用
+
+离线阶段
+1. 引入组件，初始化随机种子
 ```python
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-import sys
-sys.path.insert(0, '../../')
-sys.setrecursionlimit(100000)
 import torch
-from legodnn import BlockExtractor, BlockTrainer, ServerBlockProfiler, EdgeBlockProfiler, OptimalRuntime
-from legodnn.gen_series_legodnn_models import gen_series_legodnn_models
-from legodnn.utils.dl.common.env import set_random_seed
+from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+from legodnn.common.utils.dl.common.env import set_random_seed
 set_random_seed(0)
-from legodnn.block_detection.model_topology_extraction import topology_extraction
-from legodnn.presets.auto_block_manager import AutoBlockManager
-from legodnn.presets.common_detection_manager_1204_new import CommonDetectionManager
-from legodnn.model_manager.common_model_manager import CommonModelManager
-
-from cv_task.datasets.image_classification.cifar_dataloader import CIFAR10Dataloader, CIFAR100Dataloader
+from legodnn.common.manager.block_manager.auto_block_manager import AutoBlockManager
+from legodnn.common.manager.model_manager.common_model_manager import CommonModelManager
 from cv_task.image_classification.cifar.models import resnet18
-
-if __name__ == '__main__':
+from cv_task.datasets.image_classification.cifar_dataloader import CIFAR100Dataloader
+```
+2. 初始化需要处理的模型
+```python
+  teacher_model = resnet18(num_classes=100).to(device)
+  teacher_model.load_state_dict(torch.load('data/model/resnet18/2021-10-20/22-09-22/resnet18.pth')['net'])
+```
+3. 通过AutoBlockManager对模型进行自动化的抽取以及生成派生稀疏块，并存储到指定文件夹中
+```python
     cv_task = 'image_classification'
     dataset_name = 'cifar100'
-    model_name = 'resnet18'
-    # compress_layer_max_ratio = 0.25
-    compress_layer_max_ratio = 0.125
-    device = 'cuda' 
-    model_input_size = (1, 3, 32, 32)
-    train_batch_size = 128
-    test_batch_size = 128
-    block_sparsity = [0.0, 0.3, 0.6, 0.8]
-    root_path = os.path.join('results/legodnn', 
-                             cv_task, model_name+'_'
-                             +dataset_name + '_' 
-                             + str(compress_layer_max_ratio).replace('.', '-'))
-    compressed_blocks_dir_path = root_path + '/compressed'
-    trained_blocks_dir_path = root_path + '/trained'
-    descendant_models_dir_path = root_path + '/descendant'
-    block_training_max_epoch = 20
-    test_sample_num = 100
-    
-    teacher_model = resnet18(num_classes=100).to(device)
-    teacher_model.load_state_dict(
-            torch.load('cv_task_model/image_classification/cifar100/resnet18/2021-10-20/22-09-22/resnet18.pth')['net'])
+    model_name = 'resnet18'               
+    compress_layer_max_ratio = 0.125      # 指定自动化抽取块使，layer的最大ratio
+    device = 'cuda'                       # 指定是否使用cuda
+    model_input_size = (1, 3, 32, 32)     # 指定模型的输入数据的维度
+    block_sparsity = [0.0, 0.3, 0.6, 0.8] # 指定每个块生成多少个派生块以及每个派生快的稀疏度
 
-    print('\033[1;36m-------------------------------->    BUILD LEGODNN GRAPH\033[0m')
-    model_graph = topology_extraction(teacher_model, model_input_size, device=device)
-    model_graph.print_ordered_node()
-    # exit(0)
-    print('\033[1;36m-------------------------------->    START BLOCK DETECTION\033[0m')
-    detection_manager = CommonDetectionManager(model_graph, max_ratio=compress_layer_max_ratio) # resnet18
-    detection_manager.detection_all_blocks()
-    detection_manager.print_all_blocks()
-    # exit(0)
+    root_path = os.path.join('../data/blocks', 
+                              cv_task, model_name + '_' 
+                              + dataset_name + '_' 
+                              + str(compress_layer_max_ratio).replace('.', '-'))
+    compressed_blocks_dir_path = root_path + '/compressed'    # 指定存储文件夹
     model_manager = CommonModelManager()
-    block_manager = AutoBlockManager(block_sparsity, detection_manager, model_manager)
+    block_manager = AutoBlockManager(block_sparsity,teacher_model,
+                                     model_manager,model_input_size,
+                                     compress_layer_max_ratio,device)
+    block_manager.extract_all_blocks(compressed_blocks_dir_path)
+```
+4. 对块进行再训练
+```python
+compressed_blocks_dir_path = root_path + '/compressed'   # 指定未训练的块的位置
+trained_blocks_dir_path = root_path + '/trained'         # 指定训练后块的存储位置 
+train_loader, test_loader = CIFAR100Dataloader()         # 指定训练数据和测试数据的loader
+block_training_max_epoch = 20                            # 指定训练过程中的epoch
+block_retrainer = BlockRetrainer(teacher_model, block_manager, model_manager, 
+                                     compressed_blocks_dir_path,
+                                     trained_blocks_dir_path, 
+                                     block_training_max_epoch, 
+                                     train_loader, 
+                                     device=device)
+block_retrainer.train_all_blocks()
+```
+5. 对块精度和内存大小的分析
+```python
+trained_blocks_dir_path = root_path + '/trained'         # 指定训练后块的存储位置 
+block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
+                                          trained_blocks_dir_path, test_loader, model_input_size, device)
+block_profiler.profile_all_blocks()
+```
+
+**在线阶段**
+1. 对延迟进行计算和估计
+```python
+test_sample_num = 100
+lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+                           test_sample_num, model_input_size, device)
+lagency_estimator.profile_all_blocks()
+```
+2. 在具体的内存大小和推理延迟的条件下选择具体的块来构建模型
+```python
+lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+                               test_sample_num, model_input_size, device)
+lagency_estimator.profile_all_blocks()
+optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
+                                       block_manager, model_manager, device)
+optimal_runtime.update_model(10, 4.5 * 1024 ** 2)
+```
+
+**完整的例子**
+ 
+请参考[Demo](example/legodnn_resnet_test.py)
+
+
+**加入复杂模型**
+
+对于训练方式特殊的模型，需要重新实现`legodnn.common.manager.model_manager.abstract_model_manager`中的`AbstractModelManager`，或者基于`CommonModelManager`进行相关函数的修改
+```python
+class AbstractModelManager(abc.ABC):
+    """Define all attributes of the model.
+    """
     
-    print('\033[1;36m-------------------------------->    START BLOCK EXTRACTION\033[0m')
-    block_extractor = BlockExtractor(teacher_model, block_manager, compressed_blocks_dir_path, model_input_size, device)
-    block_extractor.extract_all_blocks()
+    @abc.abstractmethod
+    def forward_to_gen_mid_data(self, model: torch.nn.Module, batch_data: Tuple, device: str):
+        """Let model perform an inference on given data.
 
-    print('\033[1;36m-------------------------------->    START BLOCK TRAIN\033[0m')
-    train_loader, test_loader = CIFAR100Dataloader()
-    block_trainer = BlockTrainer(teacher_model, block_manager, model_manager, compressed_blocks_dir_path,
-                                 trained_blocks_dir_path, block_training_max_epoch, train_loader, device=device)
-    block_trainer.train_all_blocks()
+        Args:
+            model (torch.nn.Module): A PyTorch model.
+            batch_data (Tuple): A batch of data, typically be `(data, target)`.
+            device (str): Typically be 'cpu' or 'cuda'.
+        """
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
+    def dummy_forward_to_gen_mid_data(self, model: torch.nn.Module, model_input_size: Tuple[int], device: str):
+        """Let model perform a dummy inference.
 
-    server_block_profiler = ServerBlockProfiler(teacher_model, block_manager, model_manager,
-                                                trained_blocks_dir_path, test_loader, model_input_size, device)
-    server_block_profiler.profile_all_blocks()
+        Args:
+            model (torch.nn.Module): A PyTorch model.
+            model_input_size (Tuple[int]): Typically be `(1, 3, 32, 32)` or `(1, 3, 224, 224)`.
+            device (str): Typically be 'cpu' or 'cuda'.
+        """
+        raise NotImplementedError()
+    
+    @abc.abstractmethod 
+    def get_model_acc(self, model: torch.nn.Module, test_loader: DataLoader, device: str):
+        """Get the test accuracy of the model.
 
+        Args:
+            model (torch.nn.Module): A PyTorch model.
+            test_loader (DataLoader): Test data loader.
+            device (str): Typically be 'cpu' or 'cuda'.
+        """
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
+    def get_model_size(self, model: torch.nn.Module):
+        """Get the size of the model file (in byte).
 
-    edge_block_profiler = EdgeBlockProfiler(block_manager, model_manager, trained_blocks_dir_path, 
-                                            test_sample_num, model_input_size, device)
-    edge_block_profiler.profile_all_blocks()
+        Args:
+            model (torch.nn.Module): A PyTorch model.
+        """
+        raise NotImplementedError()
 
-    optimal_runtime = OptimalRuntime(trained_blocks_dir_path, model_input_size,
-                                     block_manager, model_manager, device)
-    gen_series_legodnn_models(deadline=100, model_size_search_range=[15,50], target_model_num=50, 
-                              optimal_runtime=optimal_runtime, 
-                              descendant_models_save_path=descendant_models_dir_path, 
-                              device=device)
+    @abc.abstractmethod
+    def get_model_flops_and_param(self, model: torch.nn.Module, model_input_size: Tuple[int]):
+        """Get the FLOPs and the number of parameters of the model, return as (FLOPs, param).
+
+        Args:
+            model (torch.nn.Module): A PyTorch model.
+            model_input_size (Tuple[int]): Typically be `(1, 3, 32, 32)` or `(1, 3, 224, 224)`.
+        """
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
+    def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input_size: Tuple[int], device: str):
+        """Get the inference latency of the model.
+
+        Args:
+            model (torch.nn.Module): A PyTorch model.
+            sample_num (int): How many samples is used in the test.
+            model_input_size (Tuple[int]): Typically be `(1, 3, 32, 32)` or `(1, 3, 224, 224)`.
+            device (str): Typically be 'cpu' or 'cuda'.
+        """
+        raise NotImplementedError()
 
 ```
 
@@ -153,7 +228,7 @@ if __name__ == '__main__':
 
 使用镜像
 
-|树莓派4B|Jeston|
+|树莓派4B(aarch64)|Jeston TX2(Armv8)|
 |----|----|
 |`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
 
