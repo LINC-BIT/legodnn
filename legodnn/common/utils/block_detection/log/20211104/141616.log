@@ -1,0 +1,421 @@
+2021-11-04 14:16:16,406 - log.py[38] - DEBUG: entry file content: ---------------------------------
+2021-11-04 14:16:16,406 - log.py[39] - DEBUG: 
+from re import L
+import re
+import sys
+
+from networkx.classes.function import non_edges
+sys.path.insert(0, '../../')
+from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from queue import Queue
+from typing import Dict, List
+
+COMPRESSED_LAYERS = ['Conv2d', 'Linear', 'ConvTranspose2d'] # 这些是可以被压缩的层
+PARAM_REUSE_LAYERS = COMPRESSED_LAYERS + ['BatchNorm2d'] # 带参数的网络层如果被重用，必须在同一个块内
+
+class BlockDetection:
+    def __init__(self, graph: LegoDNNGraph, min_compress_num=2, max_compress_num=4) -> None:
+        self.graph = graph
+        self.blocks = [] # list[list]结构，或者说list[block]，block = list[int]，每个块是块中包含的module和func在graph中的serial_number
+        self.blocks_no_compressed_layers = [] # list[list]结构，对应于self.blocks，存储的是每个block中的非压缩层的name
+        
+        # 记录一个块中的开始节点是否为占位符，占位符分为两种情况： 
+        # 一是该块的开始节点是其它块的终止节点，那么该块的开始节点中的操作就不再进行，如果为0则不是，如果为1则是占位符
+        # 二是该块的开始节点是func操作，如cat, add等,则记为占位符
+        self.blocks_start_node_is_placeholder = [] 
+        self.blocks_start_node_name_hook: List[str] = [] # 记录每个块的输入应该钩原始模型中层的名字
+        self.blocks_start_node_hook_input_or_ouput = []  # 记录钩输入还是输出，如果为0则钩输入，如果为1则钩输出
+        self.blocks_start_node_hook_index = [] # 记录钩出的结果在hook的输入输出list的位置
+        
+        self.blocks_end_node_name_hook: List[str] = []  # 记录每个块的输出应该钩原始模型中层的名字
+        self.blocks_end_node_hook_input_or_ouput = []  # 记录钩输入还是输出，如果为0则钩输入，如果为1则钩输出
+        self.blocks_end_node_hook_index = [] # 记录钩出的结果在hook的输入输出list的位置
+        # 子图约束3的条件
+        self.min_compress_num = min_compress_num  # 一个块中最少的可压缩层
+        self.max_compress_num = max_compress_num  # 一个块中最多的可压缩层
+
+        self.name_reuse_dict: Dict[List] = {} # 按名字索引所有重用层
+        self.order_reuse_dict: Dict[List] = {} # 按编号索引所有重用层
+        self._detection_all_reuse_layers() # 检测所有重用层
+        pass
+
+    def _detection_all_reuse_layers(self): # 先找出模型中所有被重用层的编号，并且在模型中的最初索引名
+        name_list = self.graph.node_dict.keys()
+        reuse_dict: Dict[List] = {}
+        for name in name_list:
+            if self.graph.node_dict[name].get_type() !='module': # 只查看重用的module元素
+                continue
+            origin_name = '.'.join(name.split('.')[:-1])
+            if origin_name in name_list:# 如果该层属于重用层则截取最后一个'.'之前的名字应该存在于整个图中
+                if origin_name in reuse_dict: # 如果重用层已经发现，则直接加入字典
+                    reuse_dict[origin_name].append(name)
+                else: # 否则，将重用层与当前层一起加入字典
+                    reuse_dict[origin_name] = [origin_name, name]
+
+        self.name_reuse_dict = reuse_dict # 按名字索引
+
+        reuse_order_dict: Dict[List] = {}
+        for origin_name, reuse_list in self.name_reuse_dict.items():
+            origin_order = self.graph.node_dict[origin_name].serial_number
+            reuse_order_dict[origin_order] = []
+            for reuse_name in reuse_list:
+                reuse_order_dict[origin_order].append(self.graph.node_dict[reuse_name].serial_number)
+
+        self.order_reuse_dict = reuse_order_dict # 按编号索引
+
+    def _find_module_node_in_model_name(self, node_order_or_name): # 发现一个module节点在原始模型中的名字，主要是为了处理被重用的层
+        # 输入可以为节点的编号或者节点的名字
+        assert node_order_or_name in self.graph.order_to_node or node_order_or_name in self.graph.node_dict
+
+        if node_order_or_name in self.graph.order_to_node:
+            node_name = self.graph.order_to_node[node_order_or_name].get_name()
+        else:
+            node_name = node_order_or_name
+
+        if '.'.join(node_name.split('.')[:-1]) in self.name_reuse_dict:
+                return '.'.join(node_name.split('.')[:-1])
+        else:
+            return node_name
+
+    def _adjust_is_no_rename_node(self, node_name):
+        if '.'.join(node_name.split('.')[:-1]) in self.name_reuse_dict:
+            return False
+        else:
+            return True
+
+    def _adjust_is_subgraph(self, block: List[int]):
+        # 判断是否只有一个开始节点和一个终止节点子图，则仅需要判断是否只有一个节点的前节点不在当前block中，只有一个节点的后节点不在当前block中
+        start_node_list = []
+        end_node_list = []
+        for node_order in block:
+            node = self.graph.order_to_node[node_order]
+
+            # 判断是否为输入节点
+            if len(node.pre_nodes)==0:
+                start_node_list.append(node_order)
+            else:
+                for name, pre_node in node.pre_nodes.items():
+                    serial_number = pre_node.serial_number
+                    if serial_number==-1 or serial_number not in block:
+                        start_node_list.append(node_order)
+                        break
+
+            # 判断是否为输出节点
+            if len(node.next_nodes)==0:
+                end_node_list.append(node_order)
+            else:
+                for name, next_node in node.next_nodes.items():
+                    serial_number = next_node.serial_number
+                    if serial_number==-1 or serial_number not in block:
+                        end_node_list.append(node_order)
+                        break
+            
+            # 有多个输入节点和多个输出节点，就不是一个块
+            if len(start_node_list)>1 or len(end_node_list)>1:
+                return False
+
+        if len(start_node_list)==1 and len(end_node_list)==1:
+            # 开始节点是编号最小的节点,终止节点是编号最大的节点
+            if start_node_list[0]==min(block) and end_node_list[0]==max(block):
+                return True
+
+        return False
+    
+    def _adjust_is_block(self, block: List[int]):
+        # 如果输入节点是可压缩层且是其它块的输出节点，则不计算
+        start_index = 0
+        start_order = block[start_index]
+        start_node = self.graph.order_to_node[start_order]
+        if start_node.get_op_type() in COMPRESSED_LAYERS:
+            for other_block in self.blocks:
+                if start_order in other_block:
+                    start_index = start_index + 1
+        
+        # 判断是否满足重用层条件：带参数的所有重用层必须要在同一个块内
+        for node_order in block[start_index:]:
+            if self.graph.order_to_node[node_order].get_op_type() not in PARAM_REUSE_LAYERS:
+                continue
+            node_name = self.graph.order_to_node[node_order].get_name()
+            reuse_layer_name = None 
+            if node_name in self.name_reuse_dict: # 如果当前层是重用层, 且名字是重用层在原始模型中的名字
+                reuse_layer_name = node_name
+
+            if '.'.join(node_name.split('.')[:-1]) in self.name_reuse_dict: # 如果当前层是重用层，且重用层是nni按照编号重起的名字
+                reuse_layer_name = '.'.join(node_name.split('.')[:-1])
+            
+            if reuse_layer_name is not None: # 该层是重用层
+                reuse_layer_order = self.graph.node_dict[reuse_layer_name].serial_number
+                for order_reuse in self.order_reuse_dict[reuse_layer_order]: # 判断当前重用
+                    if order_reuse not in block: # 存在重用层不在块内，则不满足块条件
+                        return False
+
+        # 计算可压缩层数量， NOTE：待做：重用的层只计算一次
+        compress_num = 0
+        for node_order in block[start_index:]:
+            node = self.graph.order_to_node[node_order]
+            if node.get_op_type() in COMPRESSED_LAYERS and self._adjust_is_no_rename_node(node.get_name()):
+                compress_num = compress_num + 1
+        
+        # 判断可压缩层是否满足成为一个块的条件
+        # if compress_num >= self.min_compress_num and compress_num <= self.max_compress_num:
+        #     pass
+        # else:
+        #     return False
+        if compress_num < self.min_compress_num or compress_num > self.max_compress_num:
+            return False
+
+        # 判断是否至少存在一条路径，该路径上至少有两个可压缩层 NOTE：这并不能保证块一个可被压缩，但是先这样简单判断一下 NOTE:这里貌似写错了，之后再研究吧
+        start_input_compressed_layers = self._find_block_all_paths_first_compressed_layer_name_from_input(block)
+        start_output_compressed_layers = self._find_block_all_paths_first_compressed_layer_name_from_output(block)
+
+        assert len(start_input_compressed_layers) > 0
+        assert len(start_output_compressed_layers) > 0
+
+        # 如果从输入节点每条路径上遇到的可压缩层与从输出节点每条路径上遇到的可压缩层相同，则每条路径最多存在一个可压缩层，则该块一定不存在
+        input_flag = False 
+        for node_name in start_input_compressed_layers:
+            if node_name not in start_output_compressed_layers:
+                input_flag = True
+                break
+
+        output_flag = False
+        for node_name in start_output_compressed_layers:
+            if node_name not in start_input_compressed_layers:
+                output_flag = True   
+                break       
+        if input_flag or output_flag:
+            return True
+        else:
+            return False
+
+    def _adjust_block_hook_node_input_and_output(self, block: List[int], start_node_is_placeholder: bool):
+        # 判断当前划分出的块的输入输出能否被勾出，且找到需要勾出的块
+        # update 2021.11.3 16:46: 增加可重用层勾出的输入输出在hook-list位置 
+        start_node_hook = -1
+        start_node_hook_input_or_ouput = -1
+        start_node_hook_index = 0
+        
+        end_node_hook = -1
+        end_node_hook_input_or_output = -1
+        start_node_hook_index = 0
+
+        print(start_node_is_placeholder)
+        # 查找如何勾出块的输入
+        if start_node_is_placeholder: # 如果开始节点是占位符
+            if self.graph.order_to_node[block[0]].get_type() == 'module':  
+                start_node_hook = block[0]
+                start_node_hook_input_or_ouput = 1
+            else:
+                next_nodes = self.graph.order_to_node[block[0]].next_nodes
+                for name, next_node in next_nodes.items():
+                    if next_node.get_type()=='module':
+                        start_node_hook = next_node.serial_number
+                        start_node_hook_input_or_ouput = 0
+        else:
+            if self.graph.order_to_node[block[0]].get_type() == 'module':
+                start_node_hook = block[0]
+                start_node_hook_input_or_ouput = 0
+            else:
+                pre_nodes = self.graph.order_to_node[block[0]].pre_nodes
+                for name, pre_node in pre_nodes.items():
+                    if pre_node.get_type()=='module':
+                        start_node_hook = pre_node.serial_number
+                        start_node_hook_input_or_ouput = 1
+
+        # 查找如何勾出块的输出
+        if self.graph.order_to_node[block[-1]].get_type() == 'module':
+            end_node_hook = block[-1]
+            end_node_hook_input_or_output = 1
+        else:
+            next_nodes = self.graph.order_to_node[block[-1]].next_nodes
+            for name, next_node in next_nodes.items():
+                if next_node.get_type()=='module':
+                    end_node_hook = next_node.serial_number
+                    end_node_hook_input_or_output = 0
+        
+        def _find_hook_index(node_name: str): # 发现重用层和非重用层的勾出索引，如果为非重用层，因为hook数组中只有一个元素，则勾出索引为0，如果为重用层，则判断应该勾出元素在hook数组中的位置
+            if '.'.join(node_name.split('.')[:-1]) in self.name_reuse_dict:
+                return int(node_name.split('.')[-1])
+            else:
+                return int(0)
+
+        start_node_name_hook = self._find_module_node_in_model_name(self.graph.order_to_node[start_node_hook].get_name())
+        start_node_hook_index = _find_hook_index(self.graph.order_to_node[start_node_hook].get_name())
+        end_node_name_hook = self._find_module_node_in_model_name(self.graph.order_to_node[end_node_hook].get_name())
+        end_node_hook_index = _find_hook_index(self.graph.order_to_node[end_node_hook].get_name())
+
+        out = (start_node_name_hook, start_node_hook_input_or_ouput, start_node_hook_index, end_node_name_hook, end_node_hook_input_or_output, end_node_hook_index)
+        print("块的输入输出 {}".format(out))
+        return out
+
+    def _adjust_start_node_is_placeholder(self, node_order):
+        if self.graph.order_to_node[node_order].get_type() in ['func']: # 如果开始节点为func，则直接设置为占位符
+            return True
+        # 如果开始节点在其它块中，则设置为占位符
+        for block in self.blocks:
+            if node_order in block:
+                return True
+        return False
+
+    # 发现一个块中从输入节点开始，包含在所有路径上的第一个可压缩层
+    def _find_block_all_paths_first_compressed_layer_name_from_input(self, block: List[int]):
+        start_node = self.graph.order_to_node[block[0]]
+        node_queue = Queue()
+        compressed_layers_name = []
+        node_queue.put(start_node)
+        while not node_queue.empty():
+            node = node_queue.get()
+            if node.get_op_type() in COMPRESSED_LAYERS:
+                compressed_layers_name.append(self._find_module_node_in_model_name(node.get_name()))
+                continue
+            else:
+                for next_name, next_node in node.next_nodes.items():
+                    node_queue.put(next_node)
+        
+        return list(set(compressed_layers_name))
+
+    # 发现一个块中从输出节点开始，包含在所有路径上的第一个可压缩层
+    def _find_block_all_paths_first_compressed_layer_name_from_output(self, block: List[int]):
+        end_node = self.graph.order_to_node[block[-1]]
+        node_queue = Queue()
+        compressed_layers_name = []
+        node_queue.put(end_node)
+        while not node_queue.empty():
+            node = node_queue.get()
+            if node.get_op_type() in COMPRESSED_LAYERS:
+                compressed_layers_name.append(self._find_module_node_in_model_name(node.get_name()))
+                continue
+            else:
+                for pre_name, pre_node in node.pre_nodes.items():
+                    node_queue.put(pre_node)
+        return list(set(compressed_layers_name))
+
+    def detection_all_block(self):
+        for num, node in self.graph.order_to_node.items():
+            assert node.get_type() in ['func', 'module'] # 目前先保证是这两个，如果遇到其它的操作类型再处理
+
+        # self.detection_all_reuse_layers() # 找出计算图中所有被重用层的编号
+
+        node_sum = len(self.graph.order_to_node)
+        start_order = 1
+        while(start_order < node_sum):
+            block = []
+            node_order = start_order
+            find_block_flag = False
+            block.append(node_order)
+            
+            node_order = node_order + 1
+
+            while node_order<=node_sum:
+                block.append(node_order)
+
+                # 判断是否为一个子图, 即块的子图约束1
+                is_subgraph = self._adjust_is_subgraph(block)
+            
+                if is_subgraph:
+                    # 判断是否满足块的子图约束其它条件：1、所有的可重用层必须在同一个块内；2、满足块可压缩要求(至少存在一条路径，该路径上有至少一个可压缩层) NOTE：目前的实现属于残缺版；3、满足块中可压缩层数要求
+                    is_block = self._adjust_is_block(block)
+                else:
+                    is_block = False
+                
+                # 发现一个满足条件的子图
+                if is_subgraph and is_block:
+                    # exit(0)
+                    # 判断开始节点是否为占位符，占位符的意思是该节点是上一个块的输入或者是func操作
+                    start_node_is_placeholder = self._adjust_start_node_is_placeholder(block[0])
+                    # 判断当前子图的输入输出能否被勾出，能则是一个可被训练的块，不能即使满足子图约束条件也丢弃，因为无法实现块的训练。
+                    hook_tuple = self._adjust_block_hook_node_input_and_output(block, start_node_is_placeholder) # (start_node_name_hook, start_node_hook_input_or_ouput, start_node_hook_index, end_node_name_hook, end_node_hook_input_or_output, start_node_hook_index)
+                    assert len(hook_tuple)==6
+                    block_able_train = True
+                    for i in hook_tuple:
+                        if i==-1:
+                            block_able_train=False
+                    
+                    if block_able_train: 
+                        # 当前块能被训练，且钩出当前块输入输出的节点
+                        self.blocks_start_node_is_placeholder.append(start_node_is_placeholder)
+                        self.blocks_no_compressed_layers.append(self._find_block_all_paths_first_compressed_layer_name_from_output(block))
+                        self.blocks_start_node_name_hook.append(hook_tuple[0])
+                        self.blocks_start_node_hook_input_or_ouput.append(hook_tuple[1])
+                        self.blocks_start_node_hook_index.append(hook_tuple[2])
+
+                        self.blocks_end_node_name_hook.append(hook_tuple[3])
+                        self.blocks_end_node_hook_input_or_ouput.append(hook_tuple[4])
+                        self.blocks_end_node_hook_index.append(hook_tuple[5])
+                        find_block_flag = True
+                        break
+
+                # 未发现满足条件的子图且还有节点未遍历
+                node_order = node_order + 1
+            
+            if find_block_flag: # 找到一个块，从该块的结束节点开始遍历
+                self.blocks.append(block)
+                start_order = node_order
+            else:
+                start_order = start_order + 1 # 未找到块，则从当前节点的下一个节点开始遍历
+    
+    def print_blocks(self):
+        assert len(self.blocks) == len(self.blocks_start_node_name_hook) == len(self.blocks_start_node_hook_input_or_ouput) == len(self.blocks_end_node_name_hook) == len(self.blocks_end_node_hook_input_or_ouput)
+        num = 1
+        for i, block in enumerate(self.blocks):
+            print("第{}个块: ".format(num))
+            if self.blocks_start_node_is_placeholder[i]:
+                print("开始节点是占位符")
+            else:
+                print("开始节点不是占位符")
+
+            if self.blocks_start_node_hook_input_or_ouput[i]==0:
+                print("当前块的输入：{}的输入, 索引为{}".format(self.blocks_start_node_name_hook[i], self.blocks_start_node_hook_index[i]))
+            else:
+                print("当前块的输入：{}的输出, 索引为{}".format(self.blocks_start_node_name_hook[i], self.blocks_start_node_hook_index[i]))
+
+            if self.blocks_end_node_hook_input_or_ouput[i]==0:
+                print("当前块的输出：{}的输入, 索引为{}".format(self.blocks_end_node_name_hook[i], self.blocks_end_node_hook_index[i]))
+            else:
+                print("当前块的输出：{}的输出, 索引为{}".format(self.blocks_end_node_name_hook[i], self.blocks_end_node_hook_index[i]))
+
+            for order in block:
+                print("层的编号：{}, 层的名字：{}".format(self.graph.order_to_node[order].serial_number, self.graph.order_to_node[order].get_name()))
+
+            print("非可压缩层如下：")
+            print(self.blocks_no_compressed_layers[i])
+            num = num + 1
+    
+    def print_reuse_layers(self): # 打印所有重用层
+        # print(1111)
+        for origin_name, origin_order in zip(self.name_reuse_dict.keys(), self.order_reuse_dict.keys()):
+            print("重用层 order {}, name {}".format(origin_order, origin_name))
+            print(self.order_reuse_dict[origin_order])
+            print(self.name_reuse_dict[origin_name])
+
+if __name__=='__main__':
+    import torch
+    from legodnn.third_party.nni_new.common.graph_utils import build_graph, build_module_graph
+    # net = resnet152().cuda()
+    # data = torch.ones(1, 3, 224, 224).cuda()
+    from cv_task.image_classification.cifar.models import inceptionv3, cbam_resnet18, resnet18
+    net = cbam_resnet18().cuda()
+    data = torch.ones(1, 3, 32, 32).cuda()
+
+    print(net)
+    # 通过nni建图
+    module_graph = build_module_graph(net, data)
+    name_to_node = module_graph.name_to_node  # dict
+    input_to_node = module_graph.input_to_node  # defaultdict
+    output_to_node = module_graph.output_to_node  # dict
+
+    graph = LegoDNNGraph()
+    graph.build_graph(name_to_node, input_to_node, output_to_node)
+    graph.print_ordered_node()
+    # exit(0)
+
+    # block_detection = BlockDetection(graph, min_compress_num=4, max_compress_num=6) # resnet18
+    block_detection = BlockDetection(graph, min_compress_num=8, max_compress_num=16) # inceptionv3
+    block_detection.print_reuse_layers()
+    # exit(0)
+    block_detection.detection_all_block()
+    # print(block_detection.blocks)
+    block_detection.print_blocks()
+    # graph.show_graph()
+
+2021-11-04 14:16:16,406 - log.py[40] - DEBUG: entry file content: ---------------------------------

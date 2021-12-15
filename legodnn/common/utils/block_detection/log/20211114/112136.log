@@ -1,0 +1,94 @@
+2021-11-14 11:21:36,392 - log.py[38] - DEBUG: entry file content: ---------------------------------
+2021-11-14 11:21:36,392 - log.py[39] - DEBUG: 
+from re import L
+import re
+import sys
+
+from networkx.classes.function import non_edges
+sys.path.insert(0, '../../')
+from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from queue import Queue
+from typing import Dict, List
+from legodnn.block_detection.base_block_detection import BaseBlockDetection
+COMPRESSED_LAYERS = ['Conv2d', 'Linear', 'ConvTranspose2d'] # 这些是可以被压缩的层
+PARAM_REUSE_LAYERS = COMPRESSED_LAYERS + ['BatchNorm2d'] # 带参数的网络层如果被重用，必须在同一个块内
+
+class BlockDetectionObjectDetection:
+    def __init__(self, backbone_graph=None, neck_graph=None, backbone_compress_num=(4,6), neck_compress_num=(2,3)) -> None:
+        self.backbone_graph = backbone_graph
+        self.neck_graph = neck_graph    
+
+        self.model_components = {}
+        if backbone_graph is not None:
+            # self.backbone_block_detection = BaseBlockDetection(self.backbone_graph, backbone_compress_num[0], backbone_compress_num[1], 'oto')
+            self.model_components['backbone'] = BaseBlockDetection(self.backbone_graph, backbone_compress_num[0], backbone_compress_num[1], 'oto')
+        if neck_graph is not None:
+            # self.neck_block_detection = BaseBlockDetection(self.neck_graph, neck_compress_num[0], neck_compress_num[1], 'mto')
+            self.model_components['neck'] = BaseBlockDetection(self.neck_graph, neck_compress_num[0], neck_compress_num[1], 'mto')
+
+    def detection_all_block(self):
+        for name, component in self.model_components.items():
+            self.model_components[name].detection_all_block() 
+            if len(self.model_components[name].blocks) == 0: # 如果一个块也没有发现，则将这个组件当成一个整体进行压缩  
+                print("模型组件{}不能被压缩成块，因此将其整体当做一个块".format(name))
+                self.model_components[name].min_compress_num = 8
+                self.model_components[name].max_compress_num = self.model_components[name].get_all_compress_layer_number()
+                self.model_components[name].mode = 'mtm' # 保证所有情况下都能被压缩
+                self.model_components[name].detection_all_block()
+
+    def print_components_blocks(self):
+        for name, component in self.model_components.items():
+            print("当前模型组件为{}".format(name))
+            self.model_components[name].print_blocks()
+
+if __name__=='__main__':
+    import os , re
+    from functools import partial
+
+    import mmcv
+    import torch
+    import mmdet
+    from mmcv.parallel import collate
+
+    from mmdet.apis import init_detector
+    from mmdet.datasets import replace_ImageToTensor
+    from mmdet.datasets.pipelines import Compose
+    from legodnn.utils.dl.common.model import get_module
+    import json
+    import numpy as np
+
+    config = '/data/gxy/legodnn-public-version_object_detection/cv_task/object_detection/mmdet_models/configs/faster_rcnn/faster_rcnn_r50_fpn_1x_coco.py'
+    # checkpoint = '/data/gxy/legodnn-public-version_object_detection/cv_task/object_detection/mmdet_models/checkpoints/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'
+    image_path = '/data/gxy/legodnn-public-version_object_detection/cv_task/object_detection/test.jpg'
+
+
+    device = 'cuda'
+    detector = init_detector(config, device=device) 
+    
+
+    input = torch.rand(1,3,300,400).to(device)
+
+    detector.forward = partial(detector.legodnn_jit_forward)
+    detector.eval()
+
+    from legodnn.block_detection.model_topology_extraction import topology_extraction
+    # graph = topology_extraction(detector, (1,3,300,400), device=device)
+    # graph.print_ordered_node()
+    # # graph.show_graph()
+
+    # graph_backbone = topology_extraction(get_module(detector, 'backbone'), (1,3,224,224), device=device)
+    # graph_backbone.print_ordered_node()
+
+    graph_neck = topology_extraction(get_module(detector, 'neck'), ((1,256,74,100), (1,512,38,50), (1,1024,19,25), (1,2048,10,13)), device=device)
+    graph_neck.print_ordered_node()
+    # graph_neck.show_graph()
+    # exit(0)
+    block_detection = BlockDetectionObjectDetection(None, graph_neck, (6, 8), (2,3))
+    block_detection.detection_all_block()
+    block_detection.print_components_blocks()
+    
+    # from legodnn.block_detection.block_detection import BlockDetection
+    # block_detection = BlockDetection(graph, min_compress_num=6, max_compress_num=12) # resnet
+    # block_detection.detection_all_block()
+    # block_detection.print_blocks()
+2021-11-14 11:21:36,392 - log.py[40] - DEBUG: entry file content: ---------------------------------

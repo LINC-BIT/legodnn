@@ -141,6 +141,59 @@ def get_model_latency(model: torch.nn.Module, model_input_size: Tuple[int], samp
     return avg_infer_time
 
 
+def get_model_latency_by_dummy_input(model: torch.nn.Module, dummy_input, sample_num: int,
+                                     device: str, warmup_sample_num: int, return_detail=False):
+    """Get the latency (inference time) of a PyTorch model.
+
+    Reference: https://deci.ai/resources/blog/measure-inference-time-deep-neural-networks/
+
+    Args:
+        model (torch.nn.Module): A PyTorch model.
+        model_input_size (Tuple[int]): Typically be `(1, 3, 32, 32)` or `(1, 3, 224, 224)`.
+        sample_num (int): How many inputs which size is :attr:`model_input_size` will be tested and compute the average latency as result.
+        device (str): Typically be 'cpu' or 'cuda'.
+        warmup_sample_num (int): Let model perform some dummy inference to warm up the test environment to avoid measurement loss.
+        return_detail (bool, optional): Beside the average latency, return all result measured. Defaults to False.
+
+    Returns:
+        Union[float, Tuple[float, List[float]]]: The average latency (and all lantecy data) of :attr:`model`.
+    """
+    model = model.to(device)
+    model.eval()
+
+    # warm up
+    with torch.no_grad():
+        for _ in range(warmup_sample_num):
+            model(dummy_input)
+
+    infer_time_list = []
+
+    if device == 'cuda':
+        with torch.no_grad():
+            for _ in range(sample_num):
+                s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+                s.record()
+                model(dummy_input)
+                e.record()
+                torch.cuda.synchronize()
+                cur_model_infer_time = s.elapsed_time(e) / 1000.
+                infer_time_list += [cur_model_infer_time]
+
+    else:
+        with torch.no_grad():
+            for _ in range(sample_num):
+                start = time.time()
+                model(dummy_input)
+                cur_model_infer_time = time.time() - start
+                infer_time_list += [cur_model_infer_time]
+
+    avg_infer_time = sum(infer_time_list) / sample_num
+
+    if return_detail:
+        return avg_infer_time, infer_time_list
+    return avg_infer_time
+
+
 def get_model_flops_and_params(model: torch.nn.Module, model_input_size: Tuple[int]):
     """Get FLOPs and number of parameters of a PyTorch model.
 
@@ -155,6 +208,19 @@ def get_model_flops_and_params(model: torch.nn.Module, model_input_size: Tuple[i
     ops, param = thop.profile(model, (torch.ones(model_input_size).to(device), ), verbose=False)
     return ops * 2, param
 
+def get_model_flops_and_params_by_dummy_input(model: torch.nn.Module, dummy_input):
+    """Get FLOPs and number of parameters of a PyTorch model.
+
+    Args:
+        model (torch.nn.Module): A PyTorch model.
+        model_input_size (Tuple[int]): Typically be `(1, 3, 32, 32)` or `(1, 3, 224, 224)`.
+
+    Returns:
+        Tuple[float, float]: FLOPs and number of parameters of :attr:`model`.
+    """
+    # device = get_model_device(model)
+    ops, param = thop.profile(model, dummy_input, verbose=False)
+    return ops * 2, param
 
 def get_module(model: torch.nn.Module, module_name: str):
     """Get a module from a PyTorch model.
@@ -360,6 +426,95 @@ def get_all_specific_type_layers_name(model: torch.nn.Module, types: Tuple[Type[
     return res
 
 
+class ReuseLayerActivation:  # 这些钩取的是一些被重用层的输入输出，钩取的输入输出应该为多个
+    """Collect the input and output of a middle module of a PyTorch model during inference.
+
+    Layer is a wide concept in this class. A module (e.g. ResBlock in ResNet) can be also regarded as a "layer".
+
+    Example:
+        >>> from torchvision.models import vgg16
+        >>> model = vgg16()
+        >>> # collect the input and output of 5th layer in VGG16
+        >>> layer_activation = LayerActivation(get_ith_layer(model, 5), 'cuda')
+        >>> model(torch.rand((1, 3, 224, 224)))
+        >>> layer_activation.input
+        tensor([[...]])
+        >>> layer_activation.output
+        tensor([[...]])
+        >>> layer_activation.remove()
+    """
+
+    def __init__(self, layer: torch.nn.Module, device: str):
+        """Register forward hook on corresponding layer.
+
+        Args:
+            layer (torch.nn.Module): Target layer.
+            device (str): Where the collected data is located.
+        """
+        self.hook = layer.register_forward_hook(self._hook_fn)
+        self.device = device
+        self.input_list: List = []
+        self.output_list: List = []
+        self.layer = layer
+
+    def __str__(self):
+        return '- ' + str(self.layer)
+
+    def _hook_fn(self, module, input, output):
+        # TODO: input or output may be a tuple
+        if isinstance(input, tuple) and len(input) == 1:
+            self.input_list.append(input[0].detach().to(self.device))
+        elif isinstance(input, tuple):
+            for data in input:
+                data.detach()
+                data = data.to(self.device)
+            self.input_list.append(input)
+        else:
+            self.input_list.append(input.detach().to(self.device))
+
+        if isinstance(output, tuple) and len(output) == 1:
+            self.output_list.append(output[0].detach().to(self.device))
+
+        elif isinstance(output, tuple):
+            for data in output:
+                data.detach()
+                data = data.to(self.device)
+            self.output_list.append(output)
+        else:
+            self.output_list.append(output.detach().to(self.device))
+
+        # if isinstance(input, tuple):
+        #     for data in input:
+        #         # print(type(data))
+        #         data.detach()
+        #         # data = data.to(self.device)
+        #     self.input_list.append(input)
+        # else:
+        #     self.input_list.append(input.detach().to(self.device))
+
+        # if isinstance(output, tuple):
+        #     for data in output:
+        #         data.detach()
+        #         # data = data.to(self.device)
+        #     self.output_list.append(output)
+        # else:
+        #     self.output_list.append(output.detach().to(self.device))
+
+    def remove(self):
+        """Remove the hook in the model to avoid performance effect.
+        Use this after using the collected data.
+        """
+        self.input_list.clear()
+        self.output_list.clear()
+        self.hook.remove()
+
+        # 清空勾出的输入输出数组，否则将会显存爆炸
+
+    def clear(self):
+        self.input_list.clear()
+        self.output_list.clear()
+
+
 class LayerActivation:
     """Collect the input and output of a middle module of a PyTorch model during inference.
     
@@ -514,3 +669,4 @@ class TimeProfilerWrapper:
 
     def remove(self):
         [tp.remove() for tp in self.tps]
+
