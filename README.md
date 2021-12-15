@@ -228,7 +228,7 @@ class AbstractModelManager(abc.ABC):
 
 使用镜像
 
-|树莓派4B(aarch64)|Jeston TX2(Armv8)|
+|树莓派4B(aarch64)|Jeston TX2(armv8)|
 |----|----|
 |`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
 
