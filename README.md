@@ -83,7 +83,7 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
 
 ## 安装
 **依赖**
-- Linux 和 macOS （Windows 理论上支持）
+- Linux 和 Windows 
 - Python 3.6+
 - PyTorch 1.9+
 - CUDA 10.2+ 
