@@ -82,6 +82,26 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
   - ScailingOptimizer：用于根据特定内存大小对块进行优化热更新。
 
 ## 安装
+**依赖**
+- Linux 和 macOS （Windows 理论上支持）
+- Python 3.6+
+- PyTorch 1.9+
+- CUDA 10.2+ 
+
+
+
+**安装流程**
+1. 使用conda新建虚拟环境，并进入该虚拟环境
+	```
+	conda create -n legodnn python=3.6
+	conda active legodnn
+	```
+2. 根据Pytorch官网安装Pytorch和torchvision
+
+	```
+	conda install pytorch torchvision -c pytorch
+	```
+	
 
 在安装legodnn之前，请确保Pytorch已经成功安装在环境中，可以参考PyTorch的官方[文档](https://pytorch.org/)
 
