@@ -98,7 +98,8 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
 	```
 2. 根据Pytorch官网安装Pytorch和torchvision
 
-	```
+	
+	```bash
 	conda install pytorch torchvision -c pytorch
 	```
 	
