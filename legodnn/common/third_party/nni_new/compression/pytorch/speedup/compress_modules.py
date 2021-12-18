@@ -90,7 +90,8 @@ def replace_batchnorm2d(norm, mask):
     """
     assert isinstance(mask, ModuleMasks)
     assert 'weight' in mask.param_masks and 'bias' in mask.param_masks
-    index = mask.param_masks['weight'].mask_index[0].cuda()
+    index = mask.param_masks['weight'].mask_index[0]
+    index = index if norm.weight.device.type == "cpu" else index.cuda()
     num_features = index.size()[0]
     _logger.debug("replace batchnorm2d with num_features: %d", num_features)
     new_norm = torch.nn.BatchNorm2d(num_features=num_features,
@@ -156,10 +157,10 @@ def replace_conv2d(conv, mask):
 
     if mask.output_mask is not None:
         tmp_weight_data = torch.index_select(
-            conv.weight.data, 0, out_channels_index.cuda())
+            conv.weight.data, 0, out_channels_index if conv.weight.device.type == "cpu" else out_channels_index.cuda())
         if conv.bias is not None:
             tmp_bias_data = torch.index_select(
-                conv.bias.data, 0, out_channels_index.cuda())
+                conv.bias.data, 0, out_channels_index if conv.weight.device.type == "cpu" else out_channels_index.cuda())
     else:
         tmp_weight_data = conv.weight.data
     # For the convolutional layers that have more than one group

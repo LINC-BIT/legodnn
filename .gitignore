@@ -6,3 +6,6 @@ example/*/log
 legodnn/__pycache__
 source-code-line-num.csv
 source-code-stats.py
+tmp_mask*
+legodnn/*/__pycache__
+example/log/

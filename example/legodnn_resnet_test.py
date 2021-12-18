@@ -17,17 +17,16 @@ if __name__ == '__main__':
     dataset_name = 'cifar100'
     model_name = 'resnet18'
     compress_layer_max_ratio = 0.125
-    device = 'cuda' 
+    device = 'cpu'
     model_input_size = (1, 3, 32, 32)
-    train_batch_size = 128
-    test_batch_size = 128
     block_sparsity = [0.0, 0.3, 0.6, 0.8]
+
     root_path = os.path.join('../data/blocks', cv_task, model_name + '_' + dataset_name + '_' + str(compress_layer_max_ratio).replace('.', '-'))
     compressed_blocks_dir_path = root_path + '/compressed'
     trained_blocks_dir_path = root_path + '/trained'
-    descendant_models_dir_path = root_path + '/descendant'
-    block_training_max_epoch = 20
-    test_sample_num = 100
+
+
+
     
     teacher_model = resnet18(num_classes=100).to(device)
     teacher_model.load_state_dict(torch.load('data/model/resnet18/2021-10-20/22-09-22/resnet18.pth')['net'])
@@ -40,18 +39,24 @@ if __name__ == '__main__':
 
     print('\033[1;36m-------------------------------->    START BLOCK TRAIN\033[0m')
     train_loader, test_loader = CIFAR100Dataloader()
-    block_retrainer = BlockRetrainer(teacher_model, block_manager, model_manager, compressed_blocks_dir_path,
-                                     trained_blocks_dir_path, block_training_max_epoch, train_loader, device=device)
-    block_retrainer.train_all_blocks()
 
-    block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
-                                          trained_blocks_dir_path, test_loader, model_input_size, device)
-    block_profiler.profile_all_blocks()
 
-    lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
-                               test_sample_num, model_input_size, device)
-    lagency_estimator.profile_all_blocks()
 
-    optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
-                                       block_manager, model_manager, device)
-    print('optimal model info: {}'.format(optimal_runtime.update_model(10, 4.5 * 1024 ** 2)))
+
+    # block_training_max_epoch = 20
+    # block_retrainer = BlockRetrainer(teacher_model, block_manager, model_manager, compressed_blocks_dir_path,
+    #                                  trained_blocks_dir_path, block_training_max_epoch, train_loader, device=device)
+    # block_retrainer.train_all_blocks()
+    #
+    # block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
+    #                                       trained_blocks_dir_path, test_loader, model_input_size, device)
+    # block_profiler.profile_all_blocks()
+    #
+    # test_sample_num = 100
+    # lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+    #                            test_sample_num, model_input_size, device)
+    # lagency_estimator.profile_all_blocks()
+    #
+    # optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
+    #                                    block_manager, model_manager, device)
+    # optimal_runtime.update_model(10, 4.5 * 1024 ** 2)
