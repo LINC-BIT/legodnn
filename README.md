@@ -18,7 +18,8 @@
  
 
 ## 简介
-English | [简体中文]((README_zh-CN.md)
+English | [简体中文](README_zh-CN.md)
+
  目前使用比较广泛的主要有六种视觉类DNN应用，包括**图像分类、语义分割、目标检测、行为识别、异常检测和姿态估计**。在这六种视觉DNN应用中均包含了大量的卷积层。
 
 ![image](https://user-images.githubusercontent.com/73862727/146324643-f0ddfbcc-dfd7-4ef4-b5d3-0e3600e984d0.png)
