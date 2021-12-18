@@ -65,10 +65,10 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 **Process flow**主要分为离线阶段和在线阶段。
 
 Offline Stage：
-- 原始模型通过block extrator抽取出模型中的原始块，然后将这些块通过`decendant block generator`生成稀疏派生块，然后用retrain模块将这些块根据原始数据在原始模型中产生的中间数据进行再训练。最后将原始块以及所有的再生块通过`block profiler`对块进行精度和内存的分析，生成分析文件。
+- At offline stage, the `block extrator` extracts the raw blocks from orginal model,and pass them to the `decendant block generator` to generate descendant block.Then `block retrainer` retrain the descendant blocks.Finally,`block profiler` profile all blocks' informations about accuracy and memory.
 
 Online Stage：
-- 在线阶段首先对离线阶段产生的块进行延迟分析和估计，生成延迟评估文件，然后`scailing optimizer`根据延迟评估文件以及离线阶段生成的块的精度分析文件和内存分析文件在运行时根据算法选择最优的块交给`block swicher`进行切换。
+- At online stage, the `latency estimator` estimate the latency of each block at edge device,then pass the estimate latency with the information about accuracy and memory at offline stage together to the `scaling optimater` to select blocks optimally.Finally,`block swicher` replaces the corresponding blocks in the model with the selected blocks at runtime.
 
 
 **Module details**
@@ -90,16 +90,16 @@ Online Stage：
 
 
 **Prepare environment**
-1. 使用conda新建虚拟环境，并进入该虚拟环境
+1. Create a conda virtual environment and activate it.
 	```
 	conda create -n legodnn python=3.6
 	conda active legodnn
 	```
-2. 根据[Pytorch官网](https://github.com/LINC-BIT/IoT-and-Edge-Intelligence)安装Pytorch和torchvision
+2. Install PyTorch and torchvision according the [official site](https://github.com/LINC-BIT/IoT-and-Edge-Intelligence)
 ![image](https://user-images.githubusercontent.com/73862727/146364503-5664de5b-24b1-4a85-b342-3d061cd7563f.png)
-根据官网选择要安装的Pytorch对应的参数，然后复制相应的命令在终端输入即可
+Get install params according to the selection in the official site,and copy them to the terminal.
 
-   **注意请确定安装的是CPU版本Pytorch还是GPU版本，如果是CPU版本的Pytorch请将下面代码中的`device='cuda'`改为`device='cpu'`**
+   **Note: please determine whether the CPU version of pytorch or GPU version is installed. If the CPU version of pytorch is installed, please change the `device ='cuda'`in the following code to `device ='cpu'`**
 3.  install legodnn
 
 
@@ -108,8 +108,8 @@ Online Stage：
 	```
 ## Getting Started
 
-**离线阶段**
-1. 引入组件，初始化随机种子
+**Offline stage**
+1. import components and initialize seed feed
 	```python
 	import torch
 	from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
@@ -120,38 +120,38 @@ Online Stage：
 	from cv_task.image_classification.cifar.models import resnet18
 	from cv_task.datasets.image_classification.cifar_dataloader import CIFAR100Dataloader
 	```
-2. 初始化需要处理的模型
+2. initialize orginal model
 	```python
 	  teacher_model = resnet18(num_classes=100).to(device)
 	  teacher_model.load_state_dict(torch.load('data/model/resnet18/2021-10-20/22-09-22/resnet18.pth')['net'])
 	```
-3. 通过AutoBlockManager对模型进行自动化的抽取以及生成派生稀疏块，并存储到指定文件夹中
+3. extract the blocks automatically ,then  generate descendant blocks and save the blocks to disk using AutoBlockManager
 	```python
 		cv_task = 'image_classification'
 		dataset_name = 'cifar100'
 		model_name = 'resnet18'               
-		compress_layer_max_ratio = 0.125      # 指定自动化抽取块使，layer的最大ratio
-		device = 'cuda'                       # 指定是否使用cuda
-		model_input_size = (1, 3, 32, 32)     # 指定模型的输入数据的维度
-		block_sparsity = [0.0, 0.3, 0.6, 0.8] # 指定每个块生成多少个派生块以及每个派生快的稀疏度
+		compress_layer_max_ratio = 0.125      
+		device = 'cuda'                       
+		model_input_size = (1, 3, 32, 32)     
+		block_sparsity = [0.0, 0.3, 0.6, 0.8] 
 
 		root_path = os.path.join('../data/blocks', 
 								  cv_task, model_name + '_' 
 								  + dataset_name + '_' 
 								  + str(compress_layer_max_ratio).replace('.', '-'))
-		compressed_blocks_dir_path = root_path + '/compressed'    # 指定存储文件夹
+		compressed_blocks_dir_path = root_path + '/compressed'    
 		model_manager = CommonModelManager()
 		block_manager = AutoBlockManager(block_sparsity,teacher_model,
 										 model_manager,model_input_size,
 										 compress_layer_max_ratio,device)
 		block_manager.extract_all_blocks(compressed_blocks_dir_path)
 	```
-4. 对块进行再训练
+4. retrain the blocks
 	```python
-	compressed_blocks_dir_path = root_path + '/compressed'   # 指定未训练的块的位置
-	trained_blocks_dir_path = root_path + '/trained'         # 指定训练后块的存储位置 
-	train_loader, test_loader = CIFAR100Dataloader()         # 指定训练数据和测试数据的loader
-	block_training_max_epoch = 20                            # 指定训练过程中的epoch
+	compressed_blocks_dir_path = root_path + '/compressed'   
+	trained_blocks_dir_path = root_path + '/trained'         
+	train_loader, test_loader = CIFAR100Dataloader()         
+	block_training_max_epoch = 20                            
 	block_retrainer = BlockRetrainer(teacher_model, block_manager, model_manager, 
 										 compressed_blocks_dir_path,
 										 trained_blocks_dir_path, 
@@ -160,7 +160,7 @@ Online Stage：
 										 device=device)
 	block_retrainer.train_all_blocks()
 	```
-5. 对块精度和内存大小的分析
+5. get the profiles ablout accuracy and memory of the blocks.
 	```python
 	trained_blocks_dir_path = root_path + '/trained'         # 指定训练后块的存储位置 
 	block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
@@ -168,15 +168,15 @@ Online Stage：
 	block_profiler.profile_all_blocks()
 	```
 
-**在线阶段**
-1. 对延迟进行计算和估计
+**Online stage**
+1. estimate latency time of the block 
 	```python
 	test_sample_num = 100
 	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 							   test_sample_num, model_input_size, device)
 	lagency_estimator.profile_all_blocks()
 	```
-2. 在具体的内存大小和推理延迟的条件下选择具体的块来构建模型
+2. select the blocks optimally
 	```python
 	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 								   test_sample_num, model_input_size, device)
@@ -186,14 +186,15 @@ Online Stage：
 	optimal_runtime.update_model(10, 4.5 * 1024 ** 2)
 	```
 
-**完整的例子**
+**Full example**
  
-  - 请参考[Demo](example/legodnn_resnet_test.py)
+  - please refer to [Demo](example/legodnn_resnet_test.py)
 
 
-**加入复杂模型**
+**Complex Model**
 
-对于训练方式特殊的模型，需要重新实现`legodnn.common.manager.model_manager.abstract_model_manager`中的`AbstractModelManager`，或者基于`CommonModelManager`进行相关函数的修改
+the model have particular training need to impletment a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`
+
 	```python
 	class AbstractModelManager(abc.ABC):
 		"""Define all attributes of the model.
@@ -265,26 +266,26 @@ Online Stage：
 
 	```
 
-## docker（待完善，docker镜像尚未制作完）
+## docker（Docker image is not finished yet）
 
-使用镜像
-**注意目前docker镜像不支持GPU**
-|树莓派4B(aarch64)|Jeston TX2(armv8)|
+Using docker
+**Note that these Docker images do not support GPU**
+|Raspberry pi 4B(aarch64)|Jeston TX2(armv8)|
 |----|----|
 |`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
 
 
-## 开源许可证
+## License
 
-该项目采用 [Apache 2.0 开源许可证](LICENSE)。
+This project is released under the [Apache 2.0 license](LICENSE).
 
-## 更新日志
+## Changelog
 
-**1.0.0**版本已经在 2021.12.20 发布：
+**1.0.0**was released in 2021.12.20：
 
-  基础功能实现
+  Implement basic functions
   
-## 基准测试和支持的模型
+## Supported models 
 
   **图像分类**
   - [x] [VGG (ICLR'2015)](https://arxiv.org/abs/1409.1556)
