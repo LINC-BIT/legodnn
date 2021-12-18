@@ -25,19 +25,19 @@ English | [简体中文](README_zh-CN.md)
 ![image](https://user-images.githubusercontent.com/73862727/146324643-f0ddfbcc-dfd7-4ef4-b5d3-0e3600e984d0.png)
 
 	
- - **Image classification** is to classify images according to the features in image information. The features of the original input image are extracted through multiple convolution layers, and then is fed to the full connection layers to output the probability of the image class.  As shown in Figure (a), ResNet18 can be divided into three parts: root, four stages and full-connection layers. And ResNet18 pretrained by ImageNet is usually used as a backbone to extract image features in other applications. Then other applications take the output features of these four stages further.
+ - **Image classification** classifies images according to the features in image information. The features of the original input image are extracted through multiple convolution layers, and then is fed to the full connection layers to output the probability of the image class.  As shown in Figure (a), ResNet18 can be divided into three parts: root, four stages and full-connection layers. And ResNet18 pretrained by ImageNet is usually used as a backbone to extract image features in other applications. 
 
-- **Semantic segmentation** ,which is widely used in medical images and unmanned driving scenes,is to classify every pixel point in the image. Semantic segmentation network is usually an encoder-decoder structure where encoders correspond to image classification networks for feature extraction and decoders vary from one to another.Figure (b) shows the classical FCN decoder structure of semantic segmentation network.
+- **Semantic segmentation** ,which is widely used in medical images and driverless scenes,classifies every pixel point in the image. Semantic segmentation network is usually an encoder-decoder structure where encoders correspond to image classification networks for feature extraction and decoders vary from one to another.Figure (b) shows the classical FCN decoder structure of semantic segmentation network.
 
-- **Object detection** is to detect the coordinates of frames corresponding to the objects in the image such as people, dogs, cars and recognize object. The mainstream object detection networks can be divided into three parts: backbone,neck,and head. Figure (c) shows Yolov3 Network where backbone consists of Conv and four stages ,corresponding to the structure of Resnet18. And the head is a common linear prediction layer.
+- **Object detection** detects the coordinates of the frames corresponding to the objects in images such as people, dogs, cars and then recognize objects. The mainstream object detection networks can be divided into three parts: backbone,neck,and head. Figure (c) shows Yolov3 Network where backbone consists of Conv and four stages ,corresponding to the structure of Resnet18. And the head is a common linear prediction layer.
 
-- **Action recognition** is to recognize the action of the target in the video clip, such as waving and speaking. As shown in Figure (d), a classical two-stream convolutional networks for action recognition in videos is presented. The network model is divided into spatial convolutional network and temporal convolutional network, both of which perform classification tasks and use image classification network.
+- **Action recognition**  recognizes the action of the target in the video clip, such as waving and speaking. As shown in Figure (d), a classical two-stream convolutional networks for action recognition in videos is presented. The network model is divided into spatial convolutional network and temporal convolutional network, both of which perform classification tasks and use image classification networks.
  
- - **Anomaly detection** is to detect anomalies in data, mainly in pictures and videos. Anomaly detection networks are mainly divided into two types: self training based models and GaN based models.As shown in figure (e1) and figure (e2), the self training based model extracts features of data through Resnet18 and does classfication with the full connection layer. The GaN based model is a simple and symmetrical autoencoder model.
+ - **Anomaly detection**  detects anomalies in data, mainly in pictures and videos here. Anomaly detection networks are mainly divided into two types: self training based models and GAN based models.As shown in figure (e1) and figure (e2), the self training based model extracts features of data through Resnet18 and does classfication with the full connection layer. The GAN based model is a simple and symmetrical autoencoder model.
 
 	
 	
- - **Pose estimation** ,is widely used in robot vision, motion tracking and other fields, is to estimate the pose of a 3d target object. The mainstream pose estimation networks are mainly divided into two types. The first one,the structure of which is similar to object detection, is to detect the object of the image and then detect the key points of the object. The second one, structure of which is is similar to semantic segmentation, is to detect the key points of the image first and then group the key points. 
+ - **Pose estimation** ,which is widely used in robot vision, motion tracking and other fields, estimates the pose of a 3d target object. The mainstream pose estimation networks are mainly divided into two types. The first one,the structure of which is similar to object detection, detects the object of the image and then detects the key points of the object. The second one, structure of which  is similar to semantic segmentation, detects the key points of the image first and then groups the key points. 
 	
  
 LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lightweight, block-grained, scalable solution for running multi-DNN wrokloads in mobile vision systems.The Scaling options of original model can be expanded by combining descendant model of the retrain blocks generated by the raw blocks extracted from the original DNN model  according to the convolution layer. At runtime, the block  is selected optimally to maximize accuracy under specific resources and laygency constraints,while reducing switching overhead via smark block level scaling of the DNN.  The following figure shows a example of Resnet18. This project is a PyTorch based implementation of LegoDNN, which supports the conversion of deep neural networks in the above six mainstream applications to LegoDNN, thus adding a large number of scaling options to the original model, and dynamically scaling the model at the edge to adapt to the change of device resources.
@@ -63,13 +63,13 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
  <img src="https://user-images.githubusercontent.com/73862727/146190146-32de7e60-1406-4f68-8645-f39854b5dc29.png" />
 </div>
 
-**Process flow**主要分为离线阶段和在线阶段。
+**Architecture of legodnn** is split into offline stage and online stage.
 
 Offline Stage：
-- At offline stage, the `block extrator` extracts the raw blocks from orginal model,and pass them to the `decendant block generator` to generate descendant block.Then `block retrainer` retrain the descendant blocks.Finally,`block profiler` profile all blocks' informations about accuracy and memory.
+- At offline stage, the `block extrator` extracts the raw blocks from orginal model,and feeds them to the `decendant block generator` to generate descendant block.Then `block retrainer` retrain the descendant blocks.Finally,`block profiler` profile all blocks' informations about accuracy and memory.
 
 Online Stage：
-- At online stage, the `latency estimator` estimate the latency of each block at edge device,then pass the estimate latency with the information about accuracy and memory at offline stage together to the `scaling optimater` to select blocks optimally.Finally,`block swicher` replaces the corresponding blocks in the model with the selected blocks at runtime.
+- At online stage, the `latency estimator` estimate the latency of each block at edge device,then pass the estimate latency with the information about accuracy and memory together to the `scaling optimater` to select blocks optimally.Finally,`block swicher` replaces the corresponding blocks in the model with the selected blocks at runtime.
 
 
 **Module details**
@@ -280,7 +280,7 @@ This project is released under the [Apache 2.0 license](LICENSE).
 
 ## Changelog
 
-**1.0.0**was released in 2021.12.20：
+**1.0.0** was released in 2021.12.20：
 
   Implement basic functions
   
