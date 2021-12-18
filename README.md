@@ -109,7 +109,7 @@ Get install params according to the selection in the official site,and copy them
 ## Getting Started
 
 **Offline stage**
-1. import components and initialize seed feed
+1. Import components and initialize seed feed
 	```python
 	import torch
 	from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
@@ -120,12 +120,12 @@ Get install params according to the selection in the official site,and copy them
 	from cv_task.image_classification.cifar.models import resnet18
 	from cv_task.datasets.image_classification.cifar_dataloader import CIFAR100Dataloader
 	```
-2. initialize orginal model
+2. Initialize orginal model
 	```python
 	  teacher_model = resnet18(num_classes=100).to(device)
 	  teacher_model.load_state_dict(torch.load('data/model/resnet18/2021-10-20/22-09-22/resnet18.pth')['net'])
 	```
-3. extract the blocks automatically ,then  generate descendant blocks and save the blocks to disk using AutoBlockManager
+3. Extract the blocks automatically ,then generate descendant blocks and save the blocks to disk using AutoBlockManager
 	```python
 		cv_task = 'image_classification'
 		dataset_name = 'cifar100'
@@ -146,7 +146,7 @@ Get install params according to the selection in the official site,and copy them
 										 compress_layer_max_ratio,device)
 		block_manager.extract_all_blocks(compressed_blocks_dir_path)
 	```
-4. retrain the blocks
+4. Retrain the blocks
 	```python
 	compressed_blocks_dir_path = root_path + '/compressed'   
 	trained_blocks_dir_path = root_path + '/trained'         
@@ -160,7 +160,7 @@ Get install params according to the selection in the official site,and copy them
 										 device=device)
 	block_retrainer.train_all_blocks()
 	```
-5. get the profiles ablout accuracy and memory of the blocks.
+5. Get the profiles about accuracy and memory of the blocks.
 	```python
 	trained_blocks_dir_path = root_path + '/trained'         # 指定训练后块的存储位置 
 	block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
@@ -169,14 +169,14 @@ Get install params according to the selection in the official site,and copy them
 	```
 
 **Online stage**
-1. estimate latency time of the block 
+1. Estimate latency time of the block 
 	```python
 	test_sample_num = 100
 	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 							   test_sample_num, model_input_size, device)
 	lagency_estimator.profile_all_blocks()
 	```
-2. select the blocks optimally
+2. Select the blocks optimally
 	```python
 	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 								   test_sample_num, model_input_size, device)
@@ -188,12 +188,12 @@ Get install params according to the selection in the official site,and copy them
 
 **Full example**
  
-  - please refer to [Demo](example/legodnn_resnet_test.py)
+  - Please refer to [Demo](example/legodnn_resnet_test.py)
 
 
 **Complex Model**
 
-the model have particular training need to impletment a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`
+The model have particular training need to impletment a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`.
 
 	```python
 	class AbstractModelManager(abc.ABC):
