@@ -17,62 +17,61 @@
 </div>
  
 
-## 简介
+## Introduction
 English | [简体中文](README_zh-CN.md)
 
- 目前使用比较广泛的主要有六种视觉类DNN应用，包括**图像分类、语义分割、目标检测、行为识别、异常检测和姿态估计**。在这六种视觉DNN应用中均包含了大量的卷积层。
+ At present, there are six kinds of visual DNN applications widely used, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation.  The six visual DNN applications all contain a large number of convolution layers.  
 
 ![image](https://user-images.githubusercontent.com/73862727/146324643-f0ddfbcc-dfd7-4ef4-b5d3-0e3600e984d0.png)
 
 	
- - **图像分类**是根据各自在图像信息中所反映的不同特征，把不同类别的目标区分开来的图像处理方法。输入为一个图像，通过多个卷积层提取图像的特征，再接全连接层，输出该图像属于某个类别的概率。如图（a）所示的ResNet18。Resnet18可以分为root+四个Stage+全连接层fc，经过ImageNet预训练的Resnet18网络在其他应用中用于提取图像特征，并被成为Backbone。其他应用都是对这四个Stage进行进一步的处理。
+ - **Image classification** is to classify images according to the features in image information. The features of the original input image are extracted through multiple convolution layers, and then is fed to the full connection layers to output the probability of the image class.  As shown in Figure (a), ResNet18 can be divided into three parts: root, four stages and full-connection layers. And ResNet18 pretrained by ImageNet is usually used as a backbone to extract image features in other applications. Then other applications take the output features of these four stages further.
 
-- **语义分割**是对图像中的每一个像素点进行分类，目前广泛应用于医学图像和无人驾驶等场景中。语义分割网络通常是一种编码器-解码器结构。如图（b）所示为经典语义分割网络FCN解码器结构。与目标检测网络一样，编码器对应于图像分类网络，用于提取特征，解码器各有不同。
+- **Semantic segmentation** ,which is widely used in medical images and unmanned driving scenes,is to classify every pixel point in the image. Semantic segmentation network is usually an encoder-decoder structure where encoders correspond to image classification networks for feature extraction and decoders vary from one to another.Figure (b) shows the classical FCN decoder structure of semantic segmentation network.
 
-- **目标检测**是功能是检测出图像中目标（如人、狗、车等）对应的检测框的坐标以及目标的识别。主流的目标检测网络可以分为三个部分：Backbone+Neck+检测头。如图（c）所示是Yolov3网络，其Backbone对应图中的Conv和四个Stage，也就是Resnet18中的Root和四个Stage。检测头就是常见的线性预测层。
+- **Object detection** is to detect the coordinates of frames corresponding to the objects in the image such as people, dogs, cars and recognize object. The mainstream object detection networks can be divided into three parts: backbone,neck,and head. Figure (c) shows Yolov3 Network where backbone consists of Conv and four stages ,corresponding to the structure of Resnet18. And the head is a common linear prediction layer.
 
-- **行为识别**是识别出视频片段中目标的行为，如挥手说话等。如图（d）所示为经典的行为识别双流网络。模型被分为空间卷积网络和时间卷积网络，两者都是做分类任务且均使用图像分类网络。
+- **Action recognition** is to recognize the action of the target in the video clip, such as waving and speaking. As shown in Figure (d), a classical two-stream convolutional networks for action recognition in videos is presented. The network model is divided into spatial convolutional network and temporal convolutional network, both of which perform classification tasks and use image classification network.
  
- - **异常检测**是检测数据中的异常情况，这里主要是图片和视频的异常检测。异常检测网络主要分为两种：基于Self-training的模型（分类）和基于GAN的模型（重构）。如图（e1）和图（e2）所示。基于Self-traing的模型主要是通过Resnet进行特征提取，全连接层用于分类预测。基于GAN的模型是简单对称的AutoEncoder模型。
-
+ - **Anomaly detection** is to detect anomalies in data, mainly in pictures and videos. Anomaly detection networks are mainly divided into two types: self training based models and GaN based models.As shown in figure (e1) and figure (e2), the self training based model extracts features of data through Resnet18 and does classfication with the full connection layer. The GaN based model is a simple and symmetrical autoencoder model.
 
 	
 	
- - **姿态估计**是确定某一三维目标物体的方位指向问题。姿态估计在机器人视觉、动作跟踪等很多领域都有应用。主流的姿态估计网络主要分为两种，第一种是先对图片进行目标检测然后对检测到的单张图片检测关键点，这种网络结构与目标检测类似。第二种是先找出关键点然后对关键点进行分组，从而得到检测结果，这种网络结构与语义分割相似。
+ - **Pose estimation** ,is widely used in robot vision, motion tracking and other fields, is to estimate the pose of a 3d target object. The mainstream pose estimation networks are mainly divided into two types. The first one,the structure of which is similar to object detection, is to detect the object of the image and then detect the key points of the object. The second one, structure of which is is similar to semantic segmentation, is to detect the key points of the image first and then group the key points. 
 	
  
-LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一个针对模型缩放问题的轻量级、块粒度、可伸缩的解决方案，根据卷积层从原始DNN模型中抽取块，生成稀疏派生块，然后对这些块进行再训练。通过组合这些块，扩大原始模型的伸缩选项。并且在运行时，通过算法对块的选择进行了优化。以Resnet18为例，如下图所示。 本项目是一个对LegoDNN的基于PyTorch的实现，支持将以上六种主流应用场景下的深度神经网络转换为LegoDNN，从而增加大量的缩放选项，在边缘端进行动态缩放以适应设备资源的变化。
+LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lightweight, block-grained, scalable solution for running multi-DNN wrokloads in mobile vision systems.The Scaling options of original model can be expanded by combining descendant model of the retrain blocks generated by the raw blocks extracted from the original DNN model  according to the convolution layer. At runtime, the block  is selected optimally to maximize accuracy under specific resources and laygency constraints,while reducing switching overhead via smark block level scaling of the DNN.  The following figure shows a example of Resnet18. This project is a PyTorch based implementation of LegoDNN, which supports the conversion of deep neural networks in the above six mainstream applications to LegoDNN, thus adding a large number of scaling options to the original model, and dynamically scaling the model at the edge to adapt to the change of device resources.
   
   
  <div align="center" padding="10">
    <img src="https://user-images.githubusercontent.com/73862727/145767343-1cddf0f4-a9a9-48ef-8884-57688883e167.png"/>
  </div>
  
-  **主要特性**
-- **模块化设计**
+  **Major features**
+- **Modular Design**
 
-  本项目将LegoDNN的抽块、再训练等过程解耦成各个模块，通过组合不同的模块组件，用户可以更便捷的对自己的自定义模型Lego化。
+  This project decomposes  the block extracting,retraining and selecting processes of legodnn into various modules. Users can  conver their own custom model to legodnn more conveniently by using these module components.  
   
-- **块的自动化抽取**
+- **Automatic extraction of blocks**
     
-    本项目实现了通用的块的抽取算法（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)），对于图像分类、目标检测、语义分割、姿态估计、行为识别、异常检测等类型的模型均可以通过算法，自动找出其中的块用于再训练。
+    This project has implemented a general block extraction algorithm, supporting the automatic block extraction of the models in image classification, target detection, semantic segmentation, attitude estimation, behavior recognition, anomaly detection applications.
 
-## 项目整体架构
+## Architecture
 
 <div align="center" padding="10">
  <img src="https://user-images.githubusercontent.com/73862727/146190146-32de7e60-1406-4f68-8645-f39854b5dc29.png" />
 </div>
 
-**处理流程**主要分为离线阶段和在线阶段。
+**Process flow**主要分为离线阶段和在线阶段。
 
-离线阶段：
+Offline Stage：
 - 原始模型通过block extrator抽取出模型中的原始块，然后将这些块通过`decendant block generator`生成稀疏派生块，然后用retrain模块将这些块根据原始数据在原始模型中产生的中间数据进行再训练。最后将原始块以及所有的再生块通过`block profiler`对块进行精度和内存的分析，生成分析文件。
 
-在线阶段：
+Online Stage：
 - 在线阶段首先对离线阶段产生的块进行延迟分析和估计，生成延迟评估文件，然后`scailing optimizer`根据延迟评估文件以及离线阶段生成的块的精度分析文件和内存分析文件在运行时根据算法选择最优的块交给`block swicher`进行切换。
 
 
-**具体模块说明**
+**Module details**
 - blockmanager：在本框架中通过blockmanager融合了`block extrator`、`descendant block generator`、`block swicher`的功能，主要负责块的抽取，派生，更换，存储等，本项目已经通过AutoBlockManager实现针对多种模型自动对块的抽取,其算法原理详情见[文章]()。
 - **offline**：在离线阶段对块进行再训练以提升其精度，并分析每个块的指标。
   - BlockRetrainer：用于对块的再训练。
@@ -81,8 +80,8 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
   - LatencyProfile：用于对块在边缘设备上进行延迟数据的分析。
   - ScailingOptimizer：用于根据特定内存大小对块进行优化热更新。
 
-## 安装
-**依赖**
+## Installation
+**Prerequisites**
 - Linux 和 Windows 
 - Python 3.6+
 - PyTorch 1.9+
@@ -90,7 +89,7 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
 
 
 
-**安装流程**
+**Prepare environment**
 1. 使用conda新建虚拟环境，并进入该虚拟环境
 	```
 	conda create -n legodnn python=3.6
@@ -101,13 +100,13 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
 根据官网选择要安装的Pytorch对应的参数，然后复制相应的命令在终端输入即可
 
    **注意请确定安装的是CPU版本Pytorch还是GPU版本，如果是CPU版本的Pytorch请将下面代码中的`device='cuda'`改为`device='cpu'`**
-3. 安装legodnn
+3.  install legodnn
 
 
 	```shell
 	pip install legodnn
 	```
-## 开始使用
+## Getting Started
 
 **离线阶段**
 1. 引入组件，初始化随机种子
