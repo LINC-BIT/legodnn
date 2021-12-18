@@ -100,7 +100,7 @@ Online Stage：
 Get install params according to the selection in the official site,and copy them to the terminal.
 
    **Note: please determine whether the CPU version of pytorch or GPU version is installed. If the CPU version of pytorch is installed, please change the `device ='cuda'`in the following code to `device ='cpu'`**
-3.  install legodnn
+3.  Install legodnn
 
 
 	```shell
