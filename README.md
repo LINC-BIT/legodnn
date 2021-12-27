@@ -287,35 +287,31 @@ This project is released under the [Apache 2.0 license](LICENSE).
 ## Supported models 
 
   **Image classfication**
-  - [x] [VGG (ICLR'2015)](https://arxiv.org/abs/1409.1556)
-  - [x] [InceptionV3 (CVPR'2016)](https://www.cv-foundation.org/openaccess/content_cvpr_2016/html/Szegedy_Rethinking_the_Inception_CVPR_2016_paper.html)
   - [x] [ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)
-  - [x] [CBAM (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Sanghyun_Woo_Convolutional_Block_Attention_ECCV_2018_paper.html)
+  - [x] [MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)
+  - [x] [ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)
  
   **Obejct detection**
   - [x] [Fast R-CNN (NIPS'2015)](https://ieeexplore.ieee.org/abstract/document/7485869)
   - [x] [YOLOv3 (CVPR'2018)](https://arxiv.org/abs/1804.02767)
-  - [x] [CenterNet (ICCV'2019)](https://openaccess.thecvf.com/content_ICCV_2019/html/Duan_CenterNet_Keypoint_Triplets_for_Object_Detection_ICCV_2019_paper.html)
+  - [x] [FreeAnchor (NeurIPS'2019)](https://arxiv.org/abs/1909.02466)
   
   **Semantic segmentation**
   - [x] [FCN (CVPR'2015)](https://openaccess.thecvf.com/content_cvpr_2015/html/Long_Fully_Convolutional_Networks_2015_CVPR_paper.html)
-  - [X] [SegNet (TPAMI'2017)](https://ieeexplore.ieee.org/abstract/document/7803544)
+  - [X] [U-Net (MICCAI'2016)](https://arxiv.org/abs/1505.04597)
   - [x] [DeepLab v3 (ArXiv'2017)](https://arxiv.org/abs/1706.05587)
-  - [x] [CCNet (ICCV'2021)](https://openaccess.thecvf.com/content_ICCV_2019/html/Huang_CCNet_Criss-Cross_Attention_for_Semantic_Segmentation_ICCV_2019_paper.html)
-  
-  **Pose estimation**
-  - [x] [DeepPose (CVPR'2014)](https://openaccess.thecvf.com/content_cvpr_2014/html/Toshev_DeepPose_Human_Pose_2014_CVPR_paper.html)
-  - [x] [CPN (CVPR'2018)](https://openaccess.thecvf.com/content_cvpr_2018/html/Chen_Cascaded_Pyramid_Network_CVPR_2018_paper.html)
-  - [x] [SimpleBaselines (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bin_Xiao_Simple_Baselines_for_ECCV_2018_paper.html)
-    
-  **Action recognition**
-  - [x] [Two-STeam CNN (NIPS'2014)](https://arxiv.org/abs/1406.2199)
-  - [x] [TSN (ECCV'2016)](https://link.springer.com/chapter/10.1007/978-3-319-46484-8_2)
-  - [x] [TRN (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bolei_Zhou_Temporal_Relational_Reasoning_ECCV_2018_paper.html)
+
   
   **Anomaly detection**
   - [x] [GANomaly (ACCV'2018)](https://link.springer.com/chapter/10.1007/978-3-030-20893-6_39)
   - [x] [GPND (NIPS'2018)](https://arxiv.org/abs/1807.02588)
-  - [x] [OGNet (CVPR'2020)](https://openaccess.thecvf.com/content_CVPR_2020/html/Zaheer_Old_Is_Gold_Redefining_the_Adversarially_Learned_One-Class_Classifier_Training_CVPR_2020_paper.html)
   - [x] [Self-Training (CVPR'2020)](Self-trainedDeepOrdinalRegressionforEnd-to-EndVideoAnomalyDetection)
+  
+  **Pose estimation**
+  - [x] [DeepPose (CVPR'2014)](https://openaccess.thecvf.com/content_cvpr_2014/html/Toshev_DeepPose_Human_Pose_2014_CVPR_paper.html)
+  - [x] [SimpleBaselines2D (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bin_Xiao_Simple_Baselines_for_ECCV_2018_paper.html)
+    
+  **Action recognition**
+  - [x] [TSN (ECCV'2016)](https://link.springer.com/chapter/10.1007/978-3-319-46484-8_2)
+  - [x] [TRN (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bolei_Zhou_Temporal_Relational_Reasoning_ECCV_2018_paper.html)
   
