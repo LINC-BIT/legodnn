@@ -66,10 +66,10 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 **Architecture of legodnn** is split into offline stage and online stage.
 
 Offline Stage：
-- At offline stage, the `block extrator` extracts the raw blocks from orginal model,and feeds them to the `decendant block generator` to generate descendant block.Then `block retrainer` retrain the descendant blocks.Finally,`block profiler` profile all blocks' informations about accuracy and memory.
+- At the offline stage, the `block extrator` extracts the original blocks from orginal models, and feeds them to the `decendant block generator` module to generate descendant blocks. Then the `block retrainer` module retrains the descendant blocks. Finally, the `block profiler` module profiles all blocks' accuracy and memory information.
 
 Online Stage：
-- At online stage, the `latency estimator` estimate the latency of each block at edge device,then pass the estimate latency with the information about accuracy and memory together to the `scaling optimater` to select blocks optimally.Finally,`block swicher` replaces the corresponding blocks in the model with the selected blocks at runtime.
+- At the online stage, the `latency estimator` module estimates latencies of the blocks at edge devices, then sends these latencies with the accuracy and memory information together to the `scaling optimater` module to optimally select blocks. Finally, the `block swicher` module replaces the corresponding blocks in the model with the selected blocks at runtime.
 
 
 **Module details**
