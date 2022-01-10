@@ -15,7 +15,21 @@
 
 
 </div>
- 
+
+## Table of contents
+- [1 Introduction](#1-introduction)
+  * [1.1 Major features](#11-major-features)
+  * [1.2 Architecture](#12-architecture)
+- [2 Code and Installation](#2-code-and-installation)
+  * [2.1 Code](#21-code)
+  * [2.2 Installation](#22-installation)
+- [3 Repository of DNNs in vision tasks](#3-repository-of-dnns-in-vision-tasks)
+  * [3.1 Supported models](#31-supported-models)
+  * [3.2 Full examples](#32-full-examples)
+  * [3.3 How to implement new models in LegoDNN](#33-how-to-implement-new-models-in-legodnn)
+- [4 Demo Video and experiment data](#4-demo-video-and-experiment-data)
+- [5 License](#license)
+- [6 Changelog](#changelog)
 
 ## 1 Introduction
 English | [简体中文](README_zh-CN.md)
@@ -313,11 +327,11 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 
 
-## License
+## 5 License
 
 This project is released under the [Apache 2.0 license](LICENSE).
 
-## Changelog
+## 6 Changelog
 
 **1.0.0** was released in 2021.12.20：
 
