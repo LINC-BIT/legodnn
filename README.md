@@ -28,8 +28,6 @@
   * [3.2 Full examples](#32-full-examples)
   * [3.3 How to implement new models in LegoDNN](#33-how-to-implement-new-models-in-legodnn)
 - [4 Demo Video and experiment data](#4-demo-video-and-experiment-data)
-- [5 License](#license)
-- [6 Changelog](#changelog)
 
 ## 1 Introduction
 English | [简体中文](README_zh-CN.md)
@@ -327,11 +325,11 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 
 
-## 5 License
+## License
 
 This project is released under the [Apache 2.0 license](LICENSE).
 
-## 6 Changelog
+## Changelog
 
 **1.0.0** was released in 2021.12.20：
 
