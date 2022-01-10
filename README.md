@@ -17,7 +17,7 @@
 </div>
  
 
-## Introduction
+## 1 Introduction
 English | [简体中文](README_zh-CN.md)
 
  At present, there are six kinds of visual DNN applications widely used, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation.  The six visual DNN applications all contain a large number of convolution layers.  
@@ -48,7 +48,7 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
    <img src="https://user-images.githubusercontent.com/73862727/146643884-fcb3f56a-c4d3-457c-9b6e-b930a2720d5c.png"/>
  </div>
  
-  **Major features**
+ ### 1.1 Major features
 - **Modular Design**
 
   This project decomposes  the block extracting,retraining and selecting processes of legodnn into various modules. Users can  conver their own custom model to legodnn more conveniently by using these module components.  
@@ -57,19 +57,19 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
     
     This project has implemented a general block extraction algorithm, supporting the automatic block extraction of the models in image classification, target detection, semantic segmentation, attitude estimation, behavior recognition, anomaly detection applications.
 
-## Architecture
+### 1.2 Architecture
 
 <div align="center" padding="10">
  <img src="https://user-images.githubusercontent.com/73862727/146190146-32de7e60-1406-4f68-8645-f39854b5dc29.png" />
 </div>
 
-**Architecture of legodnn** is split into offline stage and online stage.
+ **Architecture of legodnn** is split into offline stage and online stage.
 
-Offline Stage：
-- At the offline stage, the `block extrator` extracts the original blocks from orginal models, and feeds them to the `decendant block generator` module to generate descendant blocks. Then the `block retrainer` module retrains the descendant blocks. Finally, the `block profiler` module profiles all blocks' accuracy and memory information.
+- Offline Stage：
+	- At the offline stage, the `block extrator` extracts the original blocks from orginal models, and feeds them to the `decendant block generator` module to generate descendant blocks. Then the `block retrainer` module retrains the descendant blocks. Finally, the `block profiler` module profiles all blocks' accuracy and memory information.
 
-Online Stage：
-- At the online stage, the `latency estimator` module estimates latencies of the blocks at edge devices, then sends these latencies with the accuracy and memory information together to the `scaling optimater` module to optimally select blocks. Finally, the `block swicher` module replaces the corresponding blocks in the model with the selected blocks at runtime.
+- Online Stage：
+	- At the online stage, the `latency estimator` module estimates latencies of the blocks at edge devices, then sends these latencies with the accuracy and memory information together to the `scaling optimater` module to optimally select blocks. Finally, the `block swicher` module replaces the corresponding blocks in the model with the selected blocks at runtime.
 
 
 **Module details**
@@ -79,34 +79,8 @@ Online Stage：
 - **LatencyProfile**：this module is used to analyze the latency reduction percentage of the blocks in edge devices. The inference latency is obtained by simulating each block's inference in edge device directly. The latency reduction percentage of each block is calculated by using the following formula: (latency of the original block - latency of the currently derived block)/latency of the original block.
 - **ScailingOptimizer**：this module is used to update and optimize the blocks in real time. By formalizing the block selection as an integer linear programming optimization problem and resolving it in a real time, we can continuously obtain the model that owns the maximal accuracy and satisfies the conditions of specific latency and memory limitation.
 
-## Installation
-**Prerequisites**
-- Linux 和 Windows 
-- Python 3.6+
-- PyTorch 1.9+
-- CUDA 10.2+ 
-
-
-
-**Prepare environment**
-1. Create a conda virtual environment and activate it.
-	```
-	conda create -n legodnn python=3.6
-	conda active legodnn
-	```
-2. Install PyTorch and torchvision according the [official site](https://github.com/LINC-BIT/IoT-and-Edge-Intelligence)
-![image](https://user-images.githubusercontent.com/73862727/146364503-5664de5b-24b1-4a85-b342-3d061cd7563f.png)
-Get install params according to the selection in the official site,and copy them to the terminal.
-
-   **Note: please determine whether the CPU version of pytorch or GPU version is installed. If the CPU version of pytorch is installed, please change the `device ='cuda'`in the following code to `device ='cpu'`**
-3.  Install legodnn
-
-
-	```shell
-	pip install legodnn
-	```
-## Getting Started
-
+## 2 Code and Installation
+### 2.1 Code
 **Offline stage**
 1. Import components and initialize seed feed
 	```python
@@ -184,13 +158,82 @@ Get install params according to the selection in the official site,and copy them
 					   block_manager, model_manager, device)
 	optimal_runtime.update_model(10, 4.5 * 1024 ** 2)
 	```
+	
+### 2.2 Installation
+**Prerequisites**
+- Linux 和 Windows 
+- Python 3.6+
+- PyTorch 1.9+
+- CUDA 10.2+ 
 
-**Full example**
+
+
+**Prepare environment**
+1. Create a conda virtual environment and activate it.
+	```
+	conda create -n legodnn python=3.6
+	conda active legodnn
+	```
+2. Install PyTorch and torchvision according the [official site](https://github.com/LINC-BIT/IoT-and-Edge-Intelligence)
+![image](https://user-images.githubusercontent.com/73862727/146364503-5664de5b-24b1-4a85-b342-3d061cd7563f.png)
+Get install params according to the selection in the official site,and copy them to the terminal.
+
+   **Note: please determine whether the CPU version of pytorch or GPU version is installed. If the CPU version of pytorch is installed, please change the `device ='cuda'`in the following code to `device ='cpu'`**
+3.  Install legodnn
+	```shell
+	git clone https://github.com/LINC-BIT/legodnn.git
+	pip install -r requirements.txt
+	```
+
+4. Docker（Docker image is not finished yet）
+   
+	 Using docker
+	**Note that these Docker images do not support GPU**
+	|Raspberry pi 4B(aarch64)|Jeston TX2(armv8)|
+	|----|----|
+	|`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
+
+
+## 3 Repository of DNNs in vision tasks
+### 3.1 Supported models 
+
+  **Image classfication**
+  - [x] [ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)
+  - [x] [MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)
+  - [x] [ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)
+ 
+  **Obejct detection**
+  - [x] [Fast R-CNN (NIPS'2015)](https://ieeexplore.ieee.org/abstract/document/7485869)
+  - [x] [YOLOv3 (CVPR'2018)](https://arxiv.org/abs/1804.02767)
+  - [x] [FreeAnchor (NeurIPS'2019)](https://arxiv.org/abs/1909.02466)
+  
+  **Semantic segmentation**
+  - [x] [FCN (CVPR'2015)](https://openaccess.thecvf.com/content_cvpr_2015/html/Long_Fully_Convolutional_Networks_2015_CVPR_paper.html)
+  - [X] [U-Net (MICCAI'2016)](https://arxiv.org/abs/1505.04597)
+  - [x] [DeepLab v3 (ArXiv'2017)](https://arxiv.org/abs/1706.05587)
+
+  
+  **Anomaly detection**
+  - [x] [GANomaly (ACCV'2018)](https://link.springer.com/chapter/10.1007/978-3-030-20893-6_39)
+  - [x] [GPND (NIPS'2018)](https://arxiv.org/abs/1807.02588)
+  - [x] [Self-Training (CVPR'2020)](Self-trainedDeepOrdinalRegressionforEnd-to-EndVideoAnomalyDetection)
+  
+  **Pose estimation**
+  - [x] [DeepPose (CVPR'2014)](https://openaccess.thecvf.com/content_cvpr_2014/html/Toshev_DeepPose_Human_Pose_2014_CVPR_paper.html)
+  - [x] [SimpleBaselines2D (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bin_Xiao_Simple_Baselines_for_ECCV_2018_paper.html)
+    
+  **Action recognition**
+  - [x] [TSN (ECCV'2016)](https://link.springer.com/chapter/10.1007/978-3-319-46484-8_2)
+  - [x] [TRN (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bolei_Zhou_Temporal_Relational_Reasoning_ECCV_2018_paper.html)
+
+
+
+### 3.2 Full examples
  
   - Please refer to [Demo](example/legodnn_resnet_test.py)
 
 
-**Complex Model**
+### 3.3 How to implement new models in LegoDNN
 
 The model have particular training need to impletment a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`.
 
@@ -265,13 +308,9 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 ```
 
-## docker（Docker image is not finished yet）
+## 4 Demo Video and experiment data
 
-Using docker
-**Note that these Docker images do not support GPU**
-|Raspberry pi 4B(aarch64)|Jeston TX2(armv8)|
-|----|----|
-|`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
+
 
 
 ## License
@@ -284,34 +323,5 @@ This project is released under the [Apache 2.0 license](LICENSE).
 
   Implement basic functions
   
-## Supported models 
 
-  **Image classfication**
-  - [x] [ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)
-  - [x] [MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)
-  - [x] [ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)
- 
-  **Obejct detection**
-  - [x] [Fast R-CNN (NIPS'2015)](https://ieeexplore.ieee.org/abstract/document/7485869)
-  - [x] [YOLOv3 (CVPR'2018)](https://arxiv.org/abs/1804.02767)
-  - [x] [FreeAnchor (NeurIPS'2019)](https://arxiv.org/abs/1909.02466)
-  
-  **Semantic segmentation**
-  - [x] [FCN (CVPR'2015)](https://openaccess.thecvf.com/content_cvpr_2015/html/Long_Fully_Convolutional_Networks_2015_CVPR_paper.html)
-  - [X] [U-Net (MICCAI'2016)](https://arxiv.org/abs/1505.04597)
-  - [x] [DeepLab v3 (ArXiv'2017)](https://arxiv.org/abs/1706.05587)
-
-  
-  **Anomaly detection**
-  - [x] [GANomaly (ACCV'2018)](https://link.springer.com/chapter/10.1007/978-3-030-20893-6_39)
-  - [x] [GPND (NIPS'2018)](https://arxiv.org/abs/1807.02588)
-  - [x] [Self-Training (CVPR'2020)](Self-trainedDeepOrdinalRegressionforEnd-to-EndVideoAnomalyDetection)
-  
-  **Pose estimation**
-  - [x] [DeepPose (CVPR'2014)](https://openaccess.thecvf.com/content_cvpr_2014/html/Toshev_DeepPose_Human_Pose_2014_CVPR_paper.html)
-  - [x] [SimpleBaselines2D (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bin_Xiao_Simple_Baselines_for_ECCV_2018_paper.html)
-    
-  **Action recognition**
-  - [x] [TSN (ECCV'2016)](https://link.springer.com/chapter/10.1007/978-3-319-46484-8_2)
-  - [x] [TRN (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bolei_Zhou_Temporal_Relational_Reasoning_ECCV_2018_paper.html)
   
