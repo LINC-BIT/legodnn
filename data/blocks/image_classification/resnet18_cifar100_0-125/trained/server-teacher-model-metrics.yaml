@@ -1,0 +1,109 @@
+FLOPs: 1113396224.0
+blocks_info:
+- FLOPs: 151781376.0
+  id: block-0
+  index: 0
+  input_size:
+  - 64
+  - 32
+  - 32
+  output_size:
+  - 64
+  - 32
+  - 32
+  param: 74112.0
+  size: 315890
+- FLOPs: 151519232.0
+  id: block-1
+  index: 1
+  input_size:
+  - 64
+  - 32
+  - 32
+  output_size:
+  - 64
+  - 32
+  - 32
+  param: 73984.0
+  size: 313409
+- FLOPs: 113377280.0
+  id: block-2
+  index: 2
+  input_size:
+  - 64
+  - 32
+  - 32
+  output_size:
+  - 128
+  - 16
+  - 16
+  param: 221440.0
+  size: 899539
+- FLOPs: 151257088.0
+  id: block-3
+  index: 3
+  input_size:
+  - 128
+  - 16
+  - 16
+  output_size:
+  - 128
+  - 16
+  - 16
+  param: 295424.0
+  size: 1200193
+- FLOPs: 113311744.0
+  id: block-4
+  index: 4
+  input_size:
+  - 128
+  - 16
+  - 16
+  output_size:
+  - 256
+  - 8
+  - 8
+  param: 885248.0
+  size: 3555795
+- FLOPs: 151126016.0
+  id: block-5
+  index: 5
+  input_size:
+  - 256
+  - 8
+  - 8
+  output_size:
+  - 256
+  - 8
+  - 8
+  param: 1180672.0
+  size: 4743297
+- FLOPs: 113278976.0
+  id: block-6
+  index: 6
+  input_size:
+  - 256
+  - 8
+  - 8
+  output_size:
+  - 512
+  - 4
+  - 4
+  param: 3539968.0
+  size: 14176723
+- FLOPs: 151060480.0
+  id: block-7
+  index: 7
+  input_size:
+  - 512
+  - 4
+  - 4
+  output_size:
+  - 512
+  - 4
+  - 4
+  param: 4720640.0
+  size: 18907265
+model_size: 44969037
+param: 11220132.0
+test_accuracy: 0.7846999764442444

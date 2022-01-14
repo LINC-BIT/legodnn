@@ -210,7 +210,7 @@ Get install params according to the selection in the official site,and copy them
 pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 ```
 	
-  **if your device does not  have a cbc command in `/usr/bin`,you should run `apt-get install  coinor-cbc` to install it.**
+**if your device does not  have a cbc command in `/usr/bin`,you should run `apt-get install  coinor-cbc` to install it.**
    
 ## 3 Repository of DNNs in vision tasks
 ### 3.1 Supported models 

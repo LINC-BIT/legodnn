@@ -8,4 +8,5 @@ schema
 tensorboard
 thop
 colorama
-pytorch
+flask
+psutil

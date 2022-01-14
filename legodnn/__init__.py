@@ -1,10 +1,5 @@
 import os
-
-
-
-data_path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data")
-__all__ = ["common","offline","online","data_path"]
-# print(data_path)
+__all__ = ["common","offline","online"]
 
 
 from .common.manager import AbstractBlockManager,AbstractModelManager,CommonBlockManager,CommonModelManager
