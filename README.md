@@ -215,7 +215,7 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 ### 3.1 Supported models 
 
 
-  #### Image classfication
+** Image classfication**
   
   ||Model Name|Data|
   |--|--|--|
