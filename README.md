@@ -30,7 +30,6 @@
 - [4 Demo Video and experiment data](#4-demo-video-and-experiment-data)
 
 ## 1 Introduction
-English | [简体中文](README_zh-CN.md)
 
  At present, there are six kinds of visual DNN applications widely used, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation.  The six visual DNN applications all contain a large number of convolution layers.  
 
@@ -215,35 +214,59 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 ## 3 Repository of DNNs in vision tasks
 ### 3.1 Supported models 
 
-  **Image classfication**
-  - [x] [ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)
-  - [x] [MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)
-  - [x] [ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)
+
+  #### Image classfication
+  
+  ||Model Name|Data|
+  |--|--|--|
+  |&#9745;|[ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[InceptionV3(CVPR'2016)](https://ieeexplore.ieee.org/document/7780677/)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[WideResNet (BMVC'2016)](https://dx.doi.org/10.5244/C.30.87)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[RAN (CVPR'2017)](https://doi.org/10.1109/CVPR.2017.683)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[CBAM (ECCV'2018)](https://doi.org/10.1007/978-3-030-01234-2_1)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[SENet (CVPR'2018)](https://ieeexplore.ieee.org/document/341010)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[VGG (ICLR'2015)](http://arxiv.org/abs/1409.1556)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+
+ **Obejct detection**
+ ||Model Name|Data|
+  |--|--|--|
+  |&#9745;|[Fast R-CNN (NIPS'2015)](https://ieeexplore.ieee.org/abstract/document/7485869)|[PARSCAL VOC 2007](http://host.robots.ox.ac.uk/pascal/VOC)|
+  |&#9745;|[YOLOv3 (CVPR'2018)](https://arxiv.org/abs/1804.02767)|[PARSCAL VOC 2007](http://host.robots.ox.ac.uk/pascal/VOC)|
+  |&#9745;|[FreeAnchor (NeurIPS'2019)](https://arxiv.org/abs/1909.02466)|[PARSCAL VOC 2007](http://host.robots.ox.ac.uk/pascal/VOC)|
+
+
+**Semantic segmentation**
+||Model Name|Data|
+  |--|--|--|
+  |&#9745;|[FCN (CVPR'2015)](https://openaccess.thecvf.com/content_cvpr_2015/html/Long_Fully_Convolutional_Networks_2015_CVPR_paper.html)|[PARSCAL VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC)|
+  |&#9745;|[U-Net (MICCAI'2016)](https://arxiv.org/abs/1505.04597)|[DRIVE](https://drive.grand-challenge.org/)|
+  |&#9745;|[DeepLab v3 (ArXiv'2017)](https://arxiv.org/abs/1706.05587)|[PARSCAL VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC)|
+
+**Anomaly detection**
+||Model Name|Data|
+  |--|--|--|
+  |&#9745;|[GANomaly (ACCV'2018)](https://link.springer.com/chapter/10.1007/978-3-030-20893-6_39)|[Coil100](https://www1.cs.columbia.edu/CAVE/software/softlib/coil-100.php)|
+  |&#9745;|[GPND (NIPS'2018)](https://arxiv.org/abs/1807.02588)|[CLatech256](http://www.vision.caltech.edu/Image_Datasets/Caltech256/)|
+  |&#9745;|[Self-Training (CVPR'2020)](Self-trainedDeepOrdinalRegressionforEnd-to-EndVideoAnomalyDetection)|[UCSD-Ped1](http://www.svcl.ucsd.edu/projects/anomaly/dataset.html)|
+
+**Pose estimation**
+||Model Name|Data|
+  |--|--|--|
+  |&#9745;|[DeepPose (CVPR'2014)](https://openaccess.thecvf.com/content_cvpr_2014/html/Toshev_DeepPose_Human_Pose_2014_CVPR_paper.html)|[MPII](http://human-pose.mpi-inf.mpg.de/#overview)|
+  |&#9745;|[SimpleBaselines2D (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bin_Xiao_Simple_Baselines_for_ECCV_2018_paper.html)|[MPII](http://human-pose.mpi-inf.mpg.de/#overview)|
+
+
+ **Action recognition**
+ ||Model Name|Data|
+  |--|--|--|
+  |&#9745;|[TSN (ECCV'2016)](https://link.springer.com/chapter/10.1007/978-3-319-46484-8_2)|[HDMB51](https://serre-lab.clps.brown.edu/resource/hmdb-a-large-human-motion-database/#Downloads)|
+  |&#9745;|[TRN (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bolei_Zhou_Temporal_Relational_Reasoning_ECCV_2018_paper.html)|[HDMB51](https://serre-lab.clps.brown.edu/resource/hmdb-a-large-human-motion-database/#Downloads)|
+
  
-  **Obejct detection**
-  - [x] [Fast R-CNN (NIPS'2015)](https://ieeexplore.ieee.org/abstract/document/7485869)
-  - [x] [YOLOv3 (CVPR'2018)](https://arxiv.org/abs/1804.02767)
-  - [x] [FreeAnchor (NeurIPS'2019)](https://arxiv.org/abs/1909.02466)
   
-  **Semantic segmentation**
-  - [x] [FCN (CVPR'2015)](https://openaccess.thecvf.com/content_cvpr_2015/html/Long_Fully_Convolutional_Networks_2015_CVPR_paper.html)
-  - [X] [U-Net (MICCAI'2016)](https://arxiv.org/abs/1505.04597)
-  - [x] [DeepLab v3 (ArXiv'2017)](https://arxiv.org/abs/1706.05587)
-
   
-  **Anomaly detection**
-  - [x] [GANomaly (ACCV'2018)](https://link.springer.com/chapter/10.1007/978-3-030-20893-6_39)
-  - [x] [GPND (NIPS'2018)](https://arxiv.org/abs/1807.02588)
-  - [x] [Self-Training (CVPR'2020)](Self-trainedDeepOrdinalRegressionforEnd-to-EndVideoAnomalyDetection)
-  
-  **Pose estimation**
-  - [x] [DeepPose (CVPR'2014)](https://openaccess.thecvf.com/content_cvpr_2014/html/Toshev_DeepPose_Human_Pose_2014_CVPR_paper.html)
-  - [x] [SimpleBaselines2D (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bin_Xiao_Simple_Baselines_for_ECCV_2018_paper.html)
-    
-  **Action recognition**
-  - [x] [TSN (ECCV'2016)](https://link.springer.com/chapter/10.1007/978-3-319-46484-8_2)
-  - [x] [TRN (ECCV'2018)](https://openaccess.thecvf.com/content_ECCV_2018/html/Bolei_Zhou_Temporal_Relational_Reasoning_ECCV_2018_paper.html)
-
 
 
 ### 3.2 Full examples
@@ -334,7 +357,11 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 
 
-https://user-images.githubusercontent.com/73862727/149461803-4ee5479e-df34-4110-8e6b-955d7b803695.mp4
+
+https://user-images.githubusercontent.com/73862727/149520527-50c26e84-cd30-426e-94ca-a0886d104386.mp4
+
+
+
 
 
 
