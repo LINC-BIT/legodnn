@@ -1,6 +1,6 @@
 2021-11-01 15:15:56,592 - log.py[38] - DEBUG: entry file content: ---------------------------------
 2021-11-01 15:15:56,592 - log.py[39] - DEBUG: 
-from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from legodnn.common.detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
 import queue
 from typing import List
 

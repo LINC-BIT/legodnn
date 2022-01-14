@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
 
-from nni.nas.pytorch.mutator import Mutator
-from nni.nas.pytorch.mutables import LayerChoice, InputChoice
+from ......nni.nas.pytorch.mutator import Mutator
+from ......nni.nas.pytorch.mutables import LayerChoice, InputChoice
 
 
 class RandomMutator(Mutator):

@@ -6,7 +6,7 @@ import sys
 
 from networkx.classes.function import non_edges
 sys.path.insert(0, '../../')
-from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from legodnn.common.detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
 from queue import Queue
 from typing import Dict, List
 
@@ -534,7 +534,7 @@ class BlockDetectionObjectDetection:
 
 if __name__=='__main__':
     import torch
-    from legodnn.third_party.nni_new.common.graph_utils import build_graph, build_module_graph
+    from legodnn.third_party.nni.common.graph_utils import build_graph, build_module_graph
     # net = resnet152().cuda()
     # data = torch.ones(1, 3, 224, 224).cuda()
     from cv_task.image_classification.cifar.models import inceptionv3, cbam_resnet18, resnet18

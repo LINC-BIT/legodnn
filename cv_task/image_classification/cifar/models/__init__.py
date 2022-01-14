@@ -6,5 +6,5 @@ from .mobilenet import mobilenetv2
 from .mobilenet_var import mobilenetv2_w1, mobilenetv2_w2
 from .inception import inceptionv3
 from .wideresnet import wideresnet_40_10
-from .cbam.model_resnet import cbam_resnet18
-from .ran.residual_attention_network import ran_92_32
+# from .cbam.model_resnet import cbam_resnet18
+# from .ran.residual_attention_network import ran_92_32

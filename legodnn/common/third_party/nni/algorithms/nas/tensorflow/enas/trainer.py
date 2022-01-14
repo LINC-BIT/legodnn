@@ -1,12 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+# pylint: skip-file
+
 import logging
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 
-from nni.nas.tensorflow.utils import AverageMeterGroup, fill_zero_grads
+from ......nni.nas.tensorflow.utils import AverageMeterGroup, fill_zero_grads
 
 from .mutator import EnasMutator
 

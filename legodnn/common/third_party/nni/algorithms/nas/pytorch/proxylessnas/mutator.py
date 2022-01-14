@@ -7,8 +7,8 @@ from torch import nn as nn
 from torch.nn import functional as F
 import numpy as np
 
-from nni.nas.pytorch.base_mutator import BaseMutator
-from nni.nas.pytorch.mutables import LayerChoice
+from ......nni.nas.pytorch.base_mutator import BaseMutator
+from ......nni.nas.pytorch.mutables import LayerChoice
 from .utils import detach_variable
 
 class ArchGradientFunction(torch.autograd.Function):

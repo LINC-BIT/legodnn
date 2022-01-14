@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import apex  # pylint: disable=import-error
 from apex.parallel import DistributedDataParallel  # pylint: disable=import-error
 from .mutator import RegularizedDartsMutator, RegularizedMutatorParallel, DartsDiscreteMutator  # pylint: disable=wrong-import-order
-from nni.nas.pytorch.utils import AverageMeterGroup  # pylint: disable=wrong-import-order
+from ......nni.nas.pytorch.utils import AverageMeterGroup  # pylint: disable=wrong-import-order
 
 from .utils import CyclicIterator, TorchTensorEncoder, accuracy, reduce_metrics
 

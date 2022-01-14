@@ -493,7 +493,7 @@ class LegoDNNBlock(nn.Module):
     
 if __name__=='__main__':
     from cv_task.semantic_segmentation.mmseg_models.legodnn_configs.__init__ import get_deeplabv3_r18_d8_512x1024_80k_cityscapes_config
-    from legodnn.block_detection.model_topology_extraction import topology_extraction
+    from legodnn.common.detection.model_topology_extraction import topology_extraction
     from cv_task.semantic_segmentation.mmseg_models.deeplabv3 import deeplabv3_r18_d8
     device = 'cuda'
     model_input_size = (1, 3, 224, 224)
@@ -507,7 +507,7 @@ if __name__=='__main__':
     legodnn_block = LegoDNNBlock(model, num_in_block, graph, ([0],[1],[104])).to(device)
     
     from cv_task.semantic_segmentation.mmseg_tools.get_input_by_size import get_input_by_size
-    from legodnn.utils.dl.common.model import ReuseLayerActivation, get_module
+    from legodnn.common.utils.dl.common.model import ReuseLayerActivation, get_module
     
     model.eval()
     legodnn_block.eval()

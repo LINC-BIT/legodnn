@@ -17,8 +17,7 @@ def validate_op_types(model, op_types, logger):
 
     not_found_op_types = list(set(op_types) - found_types)
     if not_found_op_types:
-        # logger.warning('op_types %s not found in model', not_found_op_types)
-        pass
+        logger.warning('op_types %s not found in model', not_found_op_types)
 
     return True
 
@@ -52,3 +51,25 @@ class CompressorSchema:
 
     def validate(self, data):
         self.compressor_schema.validate(data)
+
+def validate_exclude_sparsity(data):
+    if not ('exclude' in data or 'sparsity' in data):
+        raise SchemaError('Either sparisty or exclude must be specified.')
+    return True
+
+def validate_exclude_quant_types_quant_bits(data):
+    if not ('exclude' in data or ('quant_types' in data and 'quant_bits' in data)):
+        raise SchemaError('Either (quant_types and quant_bits) or exclude must be specified.')
+    return True
+
+class PrunerSchema(CompressorSchema):
+    def _modify_schema(self, data_schema, model, logger):
+        data_schema = super()._modify_schema(data_schema, model, logger)
+        data_schema[0] = And(data_schema[0], lambda d: validate_exclude_sparsity(d))
+        return data_schema
+
+class QuantizerSchema(CompressorSchema):
+    def _modify_schema(self, data_schema, model, logger):
+        data_schema = super()._modify_schema(data_schema, model, logger)
+        data_schema[0] = And(data_schema[0], lambda d: validate_exclude_quant_types_quant_bits(d))
+        return data_schema

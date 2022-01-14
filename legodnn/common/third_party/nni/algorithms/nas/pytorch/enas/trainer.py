@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from nni.nas.pytorch.trainer import Trainer
-from nni.nas.pytorch.utils import AverageMeterGroup, to_device
+from ......nni.nas.pytorch.trainer import Trainer
+from ......nni.nas.pytorch.utils import AverageMeterGroup, to_device
 from .mutator import EnasMutator
 
 logger = logging.getLogger(__name__)

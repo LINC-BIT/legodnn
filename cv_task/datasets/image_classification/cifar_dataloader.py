@@ -5,7 +5,7 @@ from torchvision.datasets import CIFAR10, CIFAR100
 from torchvision import transforms
 from torch.utils.data.dataloader import DataLoader
 
-def CIFAR10Dataloader(root_dir='/data/zql/datasets/', train_batch_size=128, test_batch_size=128, num_workers=8):
+def CIFAR10Dataloader(root_dir='/data/zql/datasets/', train_batch_size=128, test_batch_size=128, num_workers=4):
     normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 
     transform_train = transforms.Compose([
@@ -27,7 +27,7 @@ def CIFAR10Dataloader(root_dir='/data/zql/datasets/', train_batch_size=128, test
 
     return train_loader, test_loader
 
-def CIFAR100Dataloader(root_dir='data/datasets/', train_batch_size=128, test_batch_size=128, num_workers=8):
+def CIFAR100Dataloader(root_dir='/data/zql/datasets/', train_batch_size=128, test_batch_size=128, num_workers=4):
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),

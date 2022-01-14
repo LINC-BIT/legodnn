@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import ModuleDict, ModuleList
 from torch.nn.modules import module
-from legodnn.utils.dl.common.model import get_module
+from legodnn.common.utils.dl.common.model import get_module
 
 MULTI_OUTPUT_TYPE = ['prim::TupleUnpack']
 
@@ -447,7 +447,7 @@ class LegoDNNBlock(nn.Module):
     
 if __name__=='__main__':
     from cv_task.semantic_segmentation.mmseg_models.legodnn_configs.__init__ import get_deeplabv3_r18_d8_512x1024_80k_cityscapes_config
-    from legodnn.block_detection.model_topology_extraction import topology_extraction
+    from legodnn.common.detection.model_topology_extraction import topology_extraction
     from cv_task.semantic_segmentation.mmseg_models.deeplabv3 import deeplabv3_r18_d8
     device = 'cuda'
     model_input_size = (1, 3, 320, 320)

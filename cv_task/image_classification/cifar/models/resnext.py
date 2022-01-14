@@ -92,6 +92,9 @@ def resnext29_8x64d(num_classes=10):
 def resnext29_32x4d(num_classes=10):
     return ResNeXt(num_blocks=[3,3,3], cardinality=32, bottleneck_width=4, num_classes=num_classes)
 
+# def resnext29_64x2d(num_classes=10):
+#     return ResNeXt(num_blocks=[3,3,3], cardinality=64, bottleneck_width=2, num_classes=num_classes)
+
 def save_model_to_onnx():
     import onnx
     data = torch.rand((1, 3, 32, 32)).cuda()

@@ -12,7 +12,7 @@ from scipy.linalg import LinAlgError, cho_solve, cholesky, solve_triangular
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics.pairwise import rbf_kernel
 
-from nni.utils import OptimizeMode
+from .....nni.utils import OptimizeMode
 from .graph_transformer import transform
 from .utils import Constant
 from .layers import is_layer

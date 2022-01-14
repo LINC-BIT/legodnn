@@ -131,9 +131,6 @@ def resnet101(num_classes=10):
     return ResNet(Bottleneck, [3, 4, 23, 3], num_classes)
 
 
-    
-
-
 def resnet152(num_classes=10):
     return ResNet(Bottleneck, [3, 8, 36, 3], num_classes)
 

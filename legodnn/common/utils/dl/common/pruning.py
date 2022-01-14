@@ -2,8 +2,8 @@ import copy
 import os
 from typing import List, Optional, Tuple
 import torch
-from ....third_party.nni_new.algorithms.compression.pytorch.pruning import L1FilterPruner
-from ....third_party.nni_new.compression.pytorch.speedup import ModelSpeedup
+from ....third_party.nni.algorithms.compression.pytorch.pruning import L1FilterPruner
+from ....third_party.nni.compression.pytorch.speedup import ModelSpeedup
 from ...common.others import get_cur_time_str
 
 import logging

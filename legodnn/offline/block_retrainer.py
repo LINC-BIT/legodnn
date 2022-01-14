@@ -13,7 +13,7 @@ from ..common.manager.model_manager.abstract_model_manager import AbstractModelM
 from ..common.utils.common.file import ensure_dir
 from ..common.utils.common.log import logger
 from ..common.utils.dl.common.model import save_model, ModelSaveMethod
-
+from mmcv.parallel import MMDataParallel
 
 
 
@@ -31,15 +31,16 @@ class _BlockPack:
 
 
 class BlockRetrainer:
-    def __init__(self, model, block_manager: AbstractBlockManager, model_manager: AbstractModelManager, 
-                  compressed_blocks_dir, trained_blocks_dir,
-                  max_epoch_num, train_loader,
-                  optimizer=torch.optim.Adam([torch.zeros(1)], lr=3e-4), criterion=torch.nn.MSELoss(),
-                  worker_num=1, device='cuda'):
+    def __init__(self, model, block_manager: AbstractBlockManager, model_manager: AbstractModelManager,
+                 compressed_blocks_dir, trained_blocks_dir,
+                 max_epoch_num, train_loader,
+                 optimizer=torch.optim.Adam([torch.zeros(1)], lr=3e-4), criterion=torch.nn.MSELoss(),
+                 worker_num=1, device='cuda'):
 
         self._block_manager = block_manager
         self._model_manager = model_manager
         self._model = model
+        self._model.eval()
         self._pruned_blocks_dir = compressed_blocks_dir
         self._target_blocks_dir = trained_blocks_dir
         self._optimizer = optimizer
@@ -74,8 +75,9 @@ class BlockRetrainer:
             for block_sparsity in self._block_manager.get_blocks_sparsity()[i]:
                 block_file_name = self._block_manager.get_block_file_name(block_id, block_sparsity)
                 block_file_path = os.path.join(self._pruned_blocks_dir, block_file_name)
-                pruned_blocks_info_in_same_loc += [(self._block_manager.get_block_from_file(block_file_path, self._device),
-                                                    block_file_name)]
+                pruned_blocks_info_in_same_loc += [
+                    (self._block_manager.get_block_from_file(block_file_path, self._device),
+                     block_file_name)]
             all_pruned_blocks_info += [pruned_blocks_info_in_same_loc]
             # 最终得到一个列表[[b10 b11 b12 ...], [...], [...], ...]
 
@@ -117,9 +119,11 @@ class BlockRetrainer:
         except Exception as e:
             logger.error(e)
 
-    def  _save_model_frame(self):
+    def _save_model_frame(self):
         # model frame
         empty_model = copy.deepcopy(self._model)
+        if isinstance(empty_model, MMDataParallel):
+            empty_model = empty_model.module
         for block_id in self._block_manager.get_blocks_id():
             self._block_manager.empty_block_in_model(empty_model, block_id)
         model_frame_path = os.path.join(self._target_blocks_dir, 'model_frame.pt')
@@ -131,14 +135,18 @@ class BlockRetrainer:
         self._save_model_frame()
 
         all_pruned_blocks_pack = self._get_block_pack_of_all_pruned_blocks()
-        
+
         self._model.eval()
         self._model = self._model.to(self._device)
+        raw_model = self._model
+        if isinstance(raw_model, MMDataParallel):
+            raw_model = raw_model.module
         # 得到每一组派生块的训练集 即原始块的输入输出
         # print("开始钩输入输出")
         # time.sleep(10)
         # name_to_la = self._block_manager.get_io_activation_of_all_modules(self._model, self._device)
-        name_to_la = self._block_manager.get_io_activation_of_all_blocks(self._model, self._device)
+        # name_to_la = self._block_manager.get_io_activation_of_all_blocks(self._model, self._device)
+        name_to_la = self._block_manager.get_io_activation_of_all_blocks(raw_model, self._device)
         # print(name_to_la.keys())
         need_this_epoch = True
         # print("已经钩了输入输出")
@@ -155,38 +163,43 @@ class BlockRetrainer:
 
             # batch start
             batch_num = 0
-            for batch_index, batch in tqdm.tqdm(enumerate(self._train_loader), total=len(self._train_loader), dynamic_ncols=True): # tmp modify for yolo
-                
+            for batch_index, batch in tqdm.tqdm(enumerate(self._train_loader), total=len(self._train_loader),
+                                                dynamic_ncols=True):  # tmp modify for yolo
+
                 batch_num += 1
                 # 向前传播以获取中间数据
                 self._model_manager.forward_to_gen_mid_data(self._model, batch, self._device)
 
                 thread_pool = ThreadPoolExecutor(max_workers=self._worker_num)
                 # each original block 对于一个块的训练集和训练环境
-                for block_id, pruned_blocks_pack_in_same_loc in zip(self._block_manager.get_blocks_id(), all_pruned_blocks_pack):
+                for block_id, pruned_blocks_pack_in_same_loc in zip(self._block_manager.get_blocks_id(),
+                                                                    all_pruned_blocks_pack):
                     # print("当前块的编号: {}".format(block_id))
-                    
+
                     detection_manager = self._block_manager.detection_manager
                     # 得到输入数据
                     input_layer_activation_list = []
                     start_module_name_list = detection_manager.get_blocks_start_node_name_hook(block_id)
                     # print("当前需要钩的输入节点: {}".format(start_module_name_list))
-                    
+
                     for start_module_name in start_module_name_list:
                         input_layer_activation_list.append(name_to_la.get(start_module_name))
-                        
+
                     input_need_hook_input_list = []
-                    start_node_hook_input_or_ouput_list = detection_manager.get_blocks_start_node_hook_input_or_ouput(block_id)
+                    start_node_hook_input_or_ouput_list = detection_manager.get_blocks_start_node_hook_input_or_ouput(
+                        block_id)
                     for start_node_hook_input_or_ouput in start_node_hook_input_or_ouput_list:
                         input_need_hook_input_list.append(start_node_hook_input_or_ouput == 0)
                     start_hook_index_list = detection_manager.get_blocks_start_node_hook_index(block_id)
                     input_data = ()
                     # print("当前输入在钩出数据中的位置: {}".format(start_hook_index_list))
-                    
+
                     for i, layer_activation in enumerate(input_layer_activation_list):
                         # print("输入节点{}，钩出输入的长度{}，索引位置{}".format(start_module_name_list[i], len(layer_activation.input_list), start_hook_index_list[i]))
-                        input_data = input_data + (layer_activation.input_list[start_hook_index_list[i]] if input_need_hook_input_list[i] else layer_activation.output_list[start_hook_index_list[i]],)
-                        
+                        input_data = input_data + (
+                        layer_activation.input_list[start_hook_index_list[i]] if input_need_hook_input_list[i] else
+                        layer_activation.output_list[start_hook_index_list[i]],)
+
                     if len(start_module_name_list) == 1:
                         input_data = input_data[0]
 
@@ -197,7 +210,8 @@ class BlockRetrainer:
                     for end_module_name in end_module_name_list:
                         output_layer_activation_list.append(name_to_la.get(end_module_name))
                     output_need_hook_input_list = []
-                    end_node_hook_input_or_ouput_list = detection_manager.get_blocks_end_node_hook_input_or_ouput(block_id)
+                    end_node_hook_input_or_ouput_list = detection_manager.get_blocks_end_node_hook_input_or_ouput(
+                        block_id)
                     for end_node_hook_input_or_ouput in end_node_hook_input_or_ouput_list:
                         output_need_hook_input_list.append(end_node_hook_input_or_ouput == 0)
                     end_hook_index_list = detection_manager.get_blocks_end_node_hook_index(block_id)
@@ -205,11 +219,13 @@ class BlockRetrainer:
                     # print("当前输出在钩出数据中的位置: {}".format(start_hook_index_list))
                     for i, layer_activation in enumerate(output_layer_activation_list):
                         # print("输出节点{}，钩出输出的长度{}，索引位置{}".format(start_module_name_list[i], len(layer_activation.input_list), start_hook_index_list[i]))
-                        output_data = output_data + (layer_activation.input_list[end_hook_index_list[i]] if output_need_hook_input_list[i] else layer_activation.output_list[end_hook_index_list[i]],)
-                        
+                        output_data = output_data + (
+                        layer_activation.input_list[end_hook_index_list[i]] if output_need_hook_input_list[i] else
+                        layer_activation.output_list[end_hook_index_list[i]],)
+
                     if len(end_module_name_list) == 1:
                         output_data = output_data[0]
-                        
+
                     # for input_need_hook_input, output_need_hook_input, start_module_name, end_module_name in zip(input_need_hook_input_list, output_need_hook_input_list, start_module_name_list, end_module_name_list):
                     #     print('正在训练块{}, 当前块的输入是层{}的{}, 当前块的输出是层{}的{}'.format(block_id, start_module_name,
                     #     '输入' if input_need_hook_input else '输出', end_module_name, '输入' if output_need_hook_input else '输出'))
@@ -219,7 +235,7 @@ class BlockRetrainer:
                     for pruned_block_index, pruned_block_pack in enumerate(pruned_blocks_pack_in_same_loc):
                         # print('第{}个稀疏度的块:'.format(pruned_block_index))
                         # print(pruned_block_pack.block)
-                        # save_model(pruned_block_pack.block, '/data/gxy/legodnn-public-version_9.27/blocks_test/' + str(block_index) + '_' + str(pruned_block_index), 
+                        # save_model(pruned_block_pack.block, '/data/gxy/legodnn-public-version_9.27/blocks_test/' + str(block_index) + '_' + str(pruned_block_index),
                         # ModelSaveMethod.ONNX, input_data.size())
                         if not pruned_block_pack.need_training:
                             continue
@@ -240,7 +256,7 @@ class BlockRetrainer:
                                 tuple_data.requires_grad_(True)
                         else:
                             input_data.requires_grad_(True)
-                            
+
                         pruned_block_output = pruned_block_pack.block(input_data)
                         # print("输入数据形状{}".format(input_data.size()))
                         # print("原始块输出数据形状".format(output_data.size()))
@@ -283,7 +299,7 @@ class BlockRetrainer:
                 for j, pruned_block_pack in enumerate(pruned_blocks_pack_in_same_loc):
 
                     if pruned_block_pack.need_training:
-                        pruned_block_pack.cur_loss /= batch_num   # ???
+                        pruned_block_pack.cur_loss /= batch_num  # ???
 
                     if pruned_block_pack.cur_loss < pruned_block_pack.best_loss:
                         pruned_block_pack.best_loss = pruned_block_pack.cur_loss
@@ -307,7 +323,7 @@ class BlockRetrainer:
                         pruned_block_pack.last_loss = pruned_block_pack.cur_loss
                         pruned_block_pack.losses_record += [pruned_block_pack.cur_loss]
                         pruned_block_pack.cur_loss = 0.0
-                        
+
                         # with open(pruned_block_pack.block_file_path + '.loss-record', 'w') as f:
                         #     f.write(json.dumps(pruned_block_pack.losses_record))
 

@@ -6,7 +6,7 @@ import sys
 
 from networkx.classes.function import non_edges
 sys.path.insert(0, '../../')
-from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from legodnn.common.detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
 from queue import Queue
 from typing import Dict, List
 

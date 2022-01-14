@@ -4,8 +4,7 @@
 
 from . import LevelPrunerMasker, SlimPrunerMasker, L1FilterPrunerMasker, \
     L2FilterPrunerMasker, FPGMPrunerMasker, TaylorFOWeightFilterPrunerMasker, \
-    ActivationAPoZRankFilterPrunerMasker, ActivationMeanRankFilterPrunerMasker, \
-    TRRPrunerMasker, HRankPrunerMasker, PFPMasker
+    ActivationAPoZRankFilterPrunerMasker, ActivationMeanRankFilterPrunerMasker
 
 MASKER_DICT = {
     'level': LevelPrunerMasker,
@@ -15,11 +14,5 @@ MASKER_DICT = {
     'fpgm': FPGMPrunerMasker,
     'taylorfo': TaylorFOWeightFilterPrunerMasker,
     'apoz': ActivationAPoZRankFilterPrunerMasker,
-    'mean_activation': ActivationMeanRankFilterPrunerMasker,
-
-    # implemented by queyu, 2020/11/23
-    'trr': TRRPrunerMasker,
-    # implemented by queyu, 2021/6/10
-    'hrank': HRankPrunerMasker,
-    'pfp': PFPMasker
+    'mean_activation': ActivationMeanRankFilterPrunerMasker
 }

@@ -4,16 +4,16 @@ import sys
 sys.setrecursionlimit(100000)
 import torch
 import copy
-from legodnn import BlockTrainer, ServerBlockProfiler, EdgeBlockProfiler, OptimalRuntime
-from legodnn.utils.dl.common.model import get_model_size, set_module
-from legodnn.utils.dl.common.env import set_random_seed
+from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+from legodnn.common.utils.dl.common.model import get_model_size, set_module
+from legodnn.common.utils.dl.common.env import set_random_seed
 set_random_seed(0)
-from legodnn.block_detection.model_topology_extraction import topology_extraction
-from legodnn.presets.auto_block_manager import AutoBlockManager
-from legodnn.presets.common_detection_manager_1204_new import CommonDetectionManager
-from legodnn.gen_series_legodnn_models import gen_series_legodnn_models
+from legodnn.common.detection.model_topology_extraction import topology_extraction
+from legodnn.common.manager.block_manager.auto_block_manager import AutoBlockManager
+from legodnn.common.detection.common_detection_manager_1204_new import CommonDetectionManager
+from legodnn.common.utils.gen_series_legodnn_models import gen_series_legodnn_models
 
-from legodnn.model_manager.common_semantic_segmentation_model_manager_v2 import CommonSemanticSegmentationModelManager
+from legodnn.common.manager.model_manager.common_semantic_segmentation_model_manager_v2 import CommonSemanticSegmentationModelManager
 from cv_task.semantic_segmentation.mmseg_models.legodnn_configs import get_deeplabv3_r18_d8_512x1024_80k_cityscapes_config
 from cv_task.semantic_segmentation.mmseg_tools import mmseg_init_model
 from cv_task.datasets.semantic_segmentation import mmseg_build_dataloader
@@ -70,19 +70,19 @@ if __name__=='__main__':
     print('\033[1;36m-------------------------------->    START BLOCK TRAIN\033[0m')
     train_loader, test_loader = mmseg_build_dataloader(cfg=model_config)
     parallel_teacher_detector = MMDataParallel(teacher_detector.cuda(0), device_ids=[0])
-    block_trainer = BlockTrainer(parallel_teacher_detector, block_manager, model_manager, compressed_blocks_dir_path,
+    block_trainer = BlockRetrainer(parallel_teacher_detector, block_manager, model_manager, compressed_blocks_dir_path,
                                  trained_blocks_dir_path, block_training_max_epoch, train_loader, device=device)
     block_trainer.train_all_blocks()
     # exit(0)
-    server_block_profiler = ServerBlockProfiler(teacher_detector, block_manager, model_manager,
+    server_block_profiler = BlockProfiler(teacher_detector, block_manager, model_manager,
                                                 trained_blocks_dir_path, test_loader, model_input_size, device)
     server_block_profiler.profile_all_blocks()
 
-    edge_block_profiler = EdgeBlockProfiler(block_manager, model_manager, trained_blocks_dir_path, 
+    edge_block_profiler = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path, 
                                             test_sample_num, model_input_size, device)
     edge_block_profiler.profile_all_blocks()
     # exit(0)
-    optimal_runtime = OptimalRuntime(trained_blocks_dir_path, model_input_size,
+    optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
                                      block_manager, model_manager, device)
     model_size_min = get_model_size(torch.load(os.path.join(compressed_blocks_dir_path, 'model_frame.pt')))/1024**2
     model_size_max = get_model_size(teacher_detector)/1024**2 + 1

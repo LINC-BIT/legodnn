@@ -1,6 +1,6 @@
 2021-11-02 16:08:35,853 - log.py[38] - DEBUG: entry file content: ---------------------------------
 2021-11-02 16:08:35,853 - log.py[39] - DEBUG: 
-from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from legodnn.common.detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
 import queue
 from typing import List
 
@@ -227,7 +227,7 @@ class BlockDetection:
 if __name__=='__main__':
     from torchvision.models import resnet18, resnet152
     import torch
-    from legodnn.third_party.nni_new.common.graph_utils import build_graph, build_module_graph
+    from legodnn.third_party.nni.common.graph_utils import build_graph, build_module_graph
 
     # net = resnet152().cuda()
     # data = torch.ones(1, 3, 224, 224).cuda()

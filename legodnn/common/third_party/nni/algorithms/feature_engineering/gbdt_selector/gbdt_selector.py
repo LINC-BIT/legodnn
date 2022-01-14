@@ -29,7 +29,7 @@ from sklearn.model_selection import train_test_split
 # pylint: disable=E0401
 import lightgbm as lgb
 
-from nni.feature_engineering.feature_selector import FeatureSelector
+from .....nni.feature_engineering.feature_selector import FeatureSelector
 
 
 class GBDTSelector(FeatureSelector):

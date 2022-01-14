@@ -28,6 +28,7 @@ logger = logging.getLogger('trial_keeper')
 regular = re.compile('v?(?P<version>[0-9](\.[0-9]){0,1}).*')
 
 _hdfs_client = None
+_trial_process = None
 
 
 def get_hdfs_client(args):
@@ -62,6 +63,7 @@ def get_hdfs_client(args):
 
 def main_loop(args):
     '''main loop logic for trial keeper'''
+    global _trial_process
 
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
@@ -90,13 +92,16 @@ def main_loop(args):
 
     # Notice: We don't appoint env, which means subprocess wil inherit current environment and that is expected behavior
     log_pipe_stdout = trial_syslogger_stdout.get_pipelog_reader()
-    process = Popen(args.trial_command, shell=True, stdout=log_pipe_stdout, stderr=log_pipe_stdout)
-    nni_log(LogType.Info, 'Trial keeper spawns a subprocess (pid {0}) to run command: {1}'.format(process.pid,
+    if sys.platform == 'win32':
+        _trial_process = Popen(args.trial_command, shell=True, stdout=log_pipe_stdout, stderr=log_pipe_stdout)
+    else:
+        _trial_process = Popen(args.trial_command, shell=True, stdout=log_pipe_stdout, stderr=log_pipe_stdout, preexec_fn=os.setsid)
+    nni_log(LogType.Info, 'Trial keeper spawns a subprocess (pid {0}) to run command: {1}'.format(_trial_process.pid,
                                                                                                   shlex.split(
                                                                                                       args.trial_command)))
 
     while True:
-        retCode = process.poll()
+        retCode = _trial_process.poll()
         # child worker process exits and all stdout data is read
         if retCode is not None and log_pipe_stdout.set_process_exit() and log_pipe_stdout.is_read_completed == True:
             # In Windows, the retCode -1 is 4294967295. It's larger than c_long, and raise OverflowError.
@@ -131,7 +136,7 @@ def trial_keeper_help_info(*args):
 def check_version(args):
     try:
         trial_keeper_version = pkg_resources.get_distribution('nni').version
-    except pkg_resources.ResolutionError as err:
+    except pkg_resources.ResolutionError:
         # package nni does not exist, try nni-tool package
         nni_log(LogType.Error, 'Package nni does not exist!')
         os._exit(1)
@@ -146,14 +151,13 @@ def check_version(args):
             nni_log(LogType.Info, 'nni_manager_version is {0}'.format(nni_manager_version))
             log_entry = {}
             if trial_keeper_version != nni_manager_version:
-                nni_log(LogType.Error, 'Version does not match!')
+                nni_log(LogType.Warning, 'Version does not match!')
                 error_message = 'NNIManager version is {0}, TrialKeeper version is {1}, NNI version does not match!'.format(
                     nni_manager_version, trial_keeper_version)
                 log_entry['tag'] = 'VCFail'
                 log_entry['msg'] = error_message
                 rest_post(gen_send_version_url(args.nnimanager_ip, args.nnimanager_port), json.dumps(log_entry), 10,
                           False)
-                os._exit(1)
             else:
                 nni_log(LogType.Info, 'Version match!')
                 log_entry['tag'] = 'VCSuccess'
@@ -213,6 +217,20 @@ def fetch_parameter_file(args):
     fetch_file_thread.start()
 
 
+def _set_adaptdl_signal_handler():
+    import signal
+    global _trial_process
+    def _handler(signum, frame):
+        nni_log(LogType.Info, "RECEIVED SIGNAL {}".format(signum))
+        nni_log(LogType.Debug, "TRIAL PROCESS ID {}".format(_trial_process.pid))
+        if _trial_process and (signum == signal.SIGTERM or signum == signal.SIGINT):
+            os.killpg(os.getpgid(_trial_process.pid), signal.SIGINT)
+            os.waitpid(_trial_process.pid, 0)
+        exit(1)
+    signal.signal(signal.SIGTERM, _handler)
+    signal.signal(signal.SIGINT, _handler)
+
+
 if __name__ == '__main__':
     '''NNI Trial Keeper main function'''
     PARSER = argparse.ArgumentParser()
@@ -235,8 +253,8 @@ if __name__ == '__main__':
         exit(1)
     check_version(args)
     try:
-        if NNI_PLATFORM == 'paiYarn' and is_multi_phase():
-            fetch_parameter_file(args)
+        if NNI_PLATFORM == 'adl':
+            _set_adaptdl_signal_handler()
         main_loop(args)
     except SystemExit as se:
         nni_log(LogType.Info, 'NNI trial keeper exit with code {}'.format(se.code))

@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+# pylint: skip-file
+
 import json
 import logging
 import os
@@ -9,9 +11,9 @@ import sys
 import tensorflow as tf
 
 import nni
-from nni.runtime.env_vars import trial_env_vars
-from nni.nas.tensorflow.mutables import LayerChoice, InputChoice, MutableScope
-from nni.nas.tensorflow.mutator import Mutator
+from ......nni.runtime.env_vars import trial_env_vars
+from ......nni.nas.tensorflow.mutables import LayerChoice, InputChoice, MutableScope
+from ......nni.nas.tensorflow.mutator import Mutator
 
 logger = logging.getLogger(__name__)
 

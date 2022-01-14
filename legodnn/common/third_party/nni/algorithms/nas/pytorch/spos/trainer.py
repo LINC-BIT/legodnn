@@ -4,8 +4,8 @@
 import logging
 
 import torch
-from nni.nas.pytorch.trainer import Trainer
-from nni.nas.pytorch.utils import AverageMeterGroup
+from ......nni.nas.pytorch.trainer import Trainer
+from ......nni.nas.pytorch.utils import AverageMeterGroup
 
 from .mutator import SPOSSupernetTrainingMutator
 
@@ -20,7 +20,7 @@ class SPOSSupernetTrainer(Trainer):
     ----------
     model : nn.Module
         Model with mutables.
-    mutator : Mutator
+    mutator : nni.nas.pytorch.mutator.Mutator
         A mutator object that has been initialized with the model.
     loss : callable
         Called with logits and targets. Returns a loss tensor.

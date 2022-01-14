@@ -6,8 +6,8 @@ import logging
 
 import torch
 import torch.nn as nn
-from nni.nas.pytorch.trainer import Trainer
-from nni.nas.pytorch.utils import AverageMeterGroup
+from ......nni.nas.pytorch.trainer import Trainer
+from ......nni.nas.pytorch.utils import AverageMeterGroup
 
 from .mutator import DartsMutator
 
@@ -210,5 +210,5 @@ class DartsTrainer(Trainer):
             dalphas.append(torch.autograd.grad(loss, self.mutator.parameters()))
 
         dalpha_pos, dalpha_neg = dalphas  # dalpha { L_trn(w+) }, # dalpha { L_trn(w-) }
-        hessian = [(p - n) / 2. * eps for p, n in zip(dalpha_pos, dalpha_neg)]
+        hessian = [(p - n) / (2. * eps) for p, n in zip(dalpha_pos, dalpha_neg)]
         return hessian

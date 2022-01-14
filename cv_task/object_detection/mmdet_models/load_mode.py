@@ -1,0 +1,1 @@
+LOAD_MODE = ['lego_jit', 'mmdet_test', 'mmdet_train']

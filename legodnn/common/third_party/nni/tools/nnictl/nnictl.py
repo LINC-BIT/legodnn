@@ -2,6 +2,7 @@
 # Licensed under the MIT license.
 
 import argparse
+import logging
 import os
 import pkg_resources
 from colorama import init
@@ -11,11 +12,12 @@ from .updater import update_searchspace, update_concurrency, update_duration, up
 from .nnictl_utils import stop_experiment, trial_ls, trial_kill, list_experiment, experiment_status,\
                           log_trial, experiment_clean, platform_clean, experiment_list, \
                           monitor_experiment, export_trials_data, trial_codegen, webui_url, \
-                          get_config, log_stdout, log_stderr, search_space_auto_gen, webui_nas, \
+                          get_config, log_stdout, log_stderr, search_space_auto_gen, \
                           save_experiment, load_experiment
-from .package_management import package_install, package_uninstall, package_show, package_list
+from .algo_management import algo_reg, algo_unreg, algo_show, algo_list
 from .constants import DEFAULT_REST_PORT
-from .tensorboard_utils import start_tensorboard, stop_tensorboard
+from .import ts_management
+
 init(autoreset=True)
 
 if os.environ.get('COVERAGE_PROCESS_START'):
@@ -32,6 +34,8 @@ def nni_info(*args):
         print('please run "nnictl {positional argument} --help" to see nnictl guidance')
 
 def parse_args():
+    logging.getLogger().setLevel(logging.ERROR)
+
     '''Definite the arguments users need to follow and input'''
     parser = argparse.ArgumentParser(prog='nnictl', description='use nnictl command to control nni experiments')
     parser.add_argument('--version', '-v', action='store_true')
@@ -50,23 +54,28 @@ def parse_args():
     # parse start command
     parser_start = subparsers.add_parser('create', help='create a new experiment')
     parser_start.add_argument('--config', '-c', required=True, dest='config', help='the path of yaml config file')
-    parser_start.add_argument('--port', '-p', default=DEFAULT_REST_PORT, dest='port', help='the port of restful server')
+    parser_start.add_argument('--port', '-p', default=DEFAULT_REST_PORT, dest='port', type=int, help='the port of restful server')
     parser_start.add_argument('--debug', '-d', action='store_true', help=' set debug mode')
+    parser_start.add_argument('--url_prefix', '-u', dest='url_prefix', help=' set prefix url')
     parser_start.add_argument('--foreground', '-f', action='store_true', help=' set foreground mode, print log content to terminal')
     parser_start.set_defaults(func=create_experiment)
 
     # parse resume command
     parser_resume = subparsers.add_parser('resume', help='resume a new experiment')
     parser_resume.add_argument('id', nargs='?', help='The id of the experiment you want to resume')
-    parser_resume.add_argument('--port', '-p', default=DEFAULT_REST_PORT, dest='port', help='the port of restful server')
+    parser_resume.add_argument('--port', '-p', default=DEFAULT_REST_PORT, dest='port', type=int, help='the port of restful server')
     parser_resume.add_argument('--debug', '-d', action='store_true', help=' set debug mode')
     parser_resume.add_argument('--foreground', '-f', action='store_true', help=' set foreground mode, print log content to terminal')
+    parser_resume.add_argument('--experiment_dir', '-e', help='resume experiment from external folder, specify the full path of ' \
+                               'experiment folder')
     parser_resume.set_defaults(func=resume_experiment)
 
     # parse view command
     parser_view = subparsers.add_parser('view', help='view a stopped experiment')
     parser_view.add_argument('id', nargs='?', help='The id of the experiment you want to view')
-    parser_view.add_argument('--port', '-p', default=DEFAULT_REST_PORT, dest='port', help='the port of restful server')
+    parser_view.add_argument('--port', '-p', default=DEFAULT_REST_PORT, dest='port', type=int, help='the port of restful server')
+    parser_view.add_argument('--experiment_dir', '-e', help='view experiment from external folder, specify the full path of ' \
+                             'experiment folder')
     parser_view.set_defaults(func=view_experiment)
 
     # parse update command
@@ -93,7 +102,7 @@ def parse_args():
     #parse stop command
     parser_stop = subparsers.add_parser('stop', help='stop the experiment')
     parser_stop.add_argument('id', nargs='?', help='the id of experiment, use \'all\' to stop all running experiments')
-    parser_stop.add_argument('--port', '-p', dest='port', help='the port of restful server')
+    parser_stop.add_argument('--port', '-p', dest='port', type=int, help='the port of restful server')
     parser_stop.add_argument('--all', '-a', action='store_true', help='stop all of experiments')
     parser_stop.set_defaults(func=stop_experiment)
 
@@ -179,10 +188,6 @@ def parse_args():
     parser_webui_url = parser_webui_subparsers.add_parser('url', help='show the url of web ui')
     parser_webui_url.add_argument('id', nargs='?', help='the id of experiment')
     parser_webui_url.set_defaults(func=webui_url)
-    parser_webui_nas = parser_webui_subparsers.add_parser('nas', help='show nas ui')
-    parser_webui_nas.add_argument('--port', default=6060, type=int, help='port of nas ui')
-    parser_webui_nas.add_argument('--logdir', default='.', type=str, help='the logdir where nas ui will read data')
-    parser_webui_nas.set_defaults(func=webui_nas)
 
     #parse config command
     parser_config = subparsers.add_parser('config', help='get config information')
@@ -212,38 +217,56 @@ def parse_args():
     parser_log_trial.add_argument('--trial_id', '-T', dest='trial_id', help='find trial log path by id')
     parser_log_trial.set_defaults(func=log_trial)
 
-    #parse package command
-    parser_package = subparsers.add_parser('package', help='control nni tuner and assessor packages')
-    # add subparsers for parser_package
-    parser_package_subparsers = parser_package.add_subparsers()
-    parser_package_install = parser_package_subparsers.add_parser('install', help='install packages')
-    parser_package_install.add_argument('source', nargs='?', help='installation source, can be a directory or whl file')
-    parser_package_install.add_argument('--name', '-n', dest='name', help='package name to be installed', required=False)
-    parser_package_install.set_defaults(func=package_install)
+    #parse algo command
+    parser_algo = subparsers.add_parser('algo', help='control nni builtin tuner, assessor and advisor algorithms')
+    # add subparsers for parser_algo
+    parser_algo_subparsers = parser_algo.add_subparsers()
+    parser_algo_reg = parser_algo_subparsers.add_parser(
+        'register',
+        aliases=('reg',),
+        help='''register algorithms as nni builtin algorithm, for example:
+            nnictl reg --meta_path <path_to_meta_file>
+            where <path_to_meta_file> is the path to a meta data in yml format,
+            reference the nni document and examples/tuners/customized_tuner example
+            for the format of the yml file.'''
+    )
+    parser_algo_reg.add_argument('--meta_path', '-m', dest='meta_path', help='path to the meta file', required=True)
+    parser_algo_reg.set_defaults(func=algo_reg)
 
-    parser_package_uninstall = parser_package_subparsers.add_parser('uninstall', help='uninstall packages')
-    parser_package_uninstall.add_argument('name', nargs=1, help='package name to be uninstalled')
-    parser_package_uninstall.set_defaults(func=package_uninstall)
+    parser_algo_unreg = parser_algo_subparsers.add_parser('unregister', aliases=('unreg',), help='unregister algorithm')
+    parser_algo_unreg.add_argument('name', nargs=1, help='builtin name of the algorithm')
+    parser_algo_unreg.set_defaults(func=algo_unreg)
 
-    parser_package_show = parser_package_subparsers.add_parser('show', help='show the information of packages')
-    parser_package_show.add_argument('name', nargs=1, help='builtin name of the package')
-    parser_package_show.set_defaults(func=package_show)
+    parser_algo_show = parser_algo_subparsers.add_parser('show', help='show the information of algorithm')
+    parser_algo_show.add_argument('name', nargs=1, help='builtin name of the algorithm')
+    parser_algo_show.set_defaults(func=algo_show)
 
-    parser_package_list = parser_package_subparsers.add_parser('list', help='list installed packages')
-    parser_package_list.add_argument('--all', action='store_true', help='list all builtin packages')
-    parser_package_list.set_defaults(func=package_list)
+    parser_algo_list = parser_algo_subparsers.add_parser('list', help='list registered algorithms')
+    parser_algo_list.set_defaults(func=algo_list)
 
-    #parse tensorboard command
-    parser_tensorboard = subparsers.add_parser('tensorboard', help='manage tensorboard')
-    parser_tensorboard_subparsers = parser_tensorboard.add_subparsers()
-    parser_tensorboard_start = parser_tensorboard_subparsers.add_parser('start', help='start tensorboard')
-    parser_tensorboard_start.add_argument('id', nargs='?', help='the id of experiment')
-    parser_tensorboard_start.add_argument('--trial_id', '-T', dest='trial_id', help='the id of trial')
-    parser_tensorboard_start.add_argument('--port', dest='port', default=6006, help='the port to start tensorboard')
-    parser_tensorboard_start.set_defaults(func=start_tensorboard)
-    parser_tensorboard_stop = parser_tensorboard_subparsers.add_parser('stop', help='stop tensorboard')
-    parser_tensorboard_stop.add_argument('id', nargs='?', help='the id of experiment')
-    parser_tensorboard_stop.set_defaults(func=stop_tensorboard)
+    #parse trainingservice command
+    parser_ts = subparsers.add_parser('trainingservice', help='control training service')
+    # add subparsers for parser_ts
+    parser_ts_subparsers = parser_ts.add_subparsers()
+
+    parser_ts_reg = parser_ts_subparsers.add_parser('register', help='register training service')
+    parser_ts_reg.add_argument('--package', dest='package', help='package name', required=True)
+    parser_ts_reg.set_defaults(func=ts_management.register)
+
+    parser_ts_unreg = parser_ts_subparsers.add_parser('unregister', help='unregister training service')
+    parser_ts_unreg.add_argument('--package', dest='package', help='package name', required=True)
+    parser_ts_unreg.set_defaults(func=ts_management.unregister)
+
+    parser_ts_list = parser_ts_subparsers.add_parser('list', help='list custom training services')
+    parser_ts_list.set_defaults(func=ts_management.list_services)
+
+    # To show message that nnictl package command is replaced by nnictl algo, to be remove in the future release.
+    def show_messsage_for_nnictl_package(args):
+        print_error('nnictl package command is replaced by nnictl algo, please run nnictl algo -h to show the usage')
+
+    parser_package_subparsers = subparsers.add_parser('package', help='this argument is replaced by algo', prefix_chars='\n')
+    parser_package_subparsers.add_argument('args', nargs=argparse.REMAINDER)
+    parser_package_subparsers.set_defaults(func=show_messsage_for_nnictl_package)
 
     #parse top command
     parser_top = subparsers.add_parser('top', help='monitor the experiment')
@@ -251,8 +274,26 @@ def parse_args():
     'the unit is second')
     parser_top.set_defaults(func=monitor_experiment)
 
+    # jupyter-extension command
+    jupyter_parser = subparsers.add_parser('jupyter-extension', help='install or uninstall JupyterLab extension (internal preview)')
+    jupyter_subparsers = jupyter_parser.add_subparsers()
+    jupyter_install_parser = jupyter_subparsers.add_parser('install', help='install JupyterLab extension')
+    jupyter_install_parser.set_defaults(func=_jupyter_install)
+    jupyter_uninstall_parser = jupyter_subparsers.add_parser('uninstall', help='uninstall JupyterLab extension')
+    jupyter_uninstall_parser.set_defaults(func=_jupyter_uninstall)
+
     args = parser.parse_args()
     args.func(args)
+
+def _jupyter_install(_args):
+    import nni.tools.jupyter_extension.management as jupyter_management
+    jupyter_management.install()
+    print('Successfully installed JupyterLab extension')
+
+def _jupyter_uninstall(_args):
+    import nni.tools.jupyter_extension.management as jupyter_management
+    jupyter_management.uninstall()
+    print('Successfully uninstalled JupyterLab extension')
 
 if __name__ == '__main__':
     parse_args()

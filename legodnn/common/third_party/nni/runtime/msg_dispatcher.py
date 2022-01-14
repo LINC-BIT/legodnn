@@ -5,12 +5,13 @@ import logging
 from collections import defaultdict
 import json_tricks
 
-from nni import NoMoreTrialError
-from .protocol import CommandType, send
-from .msg_dispatcher_base import MsgDispatcherBase
-from nni.assessor import AssessResult
+from ...nni import NoMoreTrialError
+from ...nni.assessor import AssessResult
+
 from .common import multi_thread_enabled, multi_phase_enabled
 from .env_vars import dispatcher_env_vars
+from .msg_dispatcher_base import MsgDispatcherBase
+from .protocol import CommandType, send
 from ..utils import MetricType, to_json
 
 _logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def _sort_history(history):
 # Tuner global variables
 _next_parameter_id = 0
 _trial_params = {}
-'''key: trial job ID; value: parameters'''
+'''key: parameter ID; value: parameters'''
 _customized_parameter_ids = set()
 
 
@@ -114,7 +115,7 @@ class MsgDispatcher(MsgDispatcherBase):
         data: a list of dictionaries, each of which has at least two keys, 'parameter' and 'value'
         """
         for entry in data:
-            entry['value'] = entry['value']  if type(entry['value']) is str else json_tricks.dumps(entry['value'])
+            entry['value'] = entry['value'] if type(entry['value']) is str else json_tricks.dumps(entry['value'])
             entry['value'] = json_tricks.loads(entry['value'])
         self.tuner.import_data(data)
 
@@ -125,7 +126,7 @@ class MsgDispatcher(MsgDispatcherBase):
 
     def handle_report_metric_data(self, data):
         """
-        data: a dict received from nni_manager, which contains:
+        data: a dict received from ....nni_manager, which contains:
               - 'parameter_id': id of the trial
               - 'value': metric value reported by nni.report_final_result()
               - 'type': report type, support {'FINAL', 'PERIODICAL'}
@@ -182,8 +183,11 @@ class MsgDispatcher(MsgDispatcherBase):
             customized = True
         else:
             customized = False
+        if id_ in _trial_params:
             self.tuner.receive_trial_result(id_, _trial_params[id_], value, customized=customized,
                                             trial_job_id=data.get('trial_job_id'))
+        else:
+            _logger.warning('Find unknown job parameter id %s, maybe something goes wrong.', _trial_params[id_])
 
     def _handle_intermediate_metric_data(self, data):
         """Call assessor to process intermediate results

@@ -9,8 +9,7 @@ import copy
 import numpy as np
 import torch
 import torch.nn as nn
-
-from nni.compression.pytorch.compressor import PrunerModuleWrapper
+from .......nni.compression.pytorch.compressor import PrunerModuleWrapper
 from .. import AMCWeightMasker
 
 _logger = logging.getLogger(__name__)
@@ -85,7 +84,7 @@ class ChannelPruningEnv:
         args:
             A Namespace object containing following arguments:
             model_type: str
-                model type to prune, currently 'mobilenet' and 'mobilenetv2' are supported.
+                model type to prune, currently 'mobilenet', 'mobilenetv2' and 'resnet' are supported.
             flops_ratio: float
                 preserve flops ratio.
             lbound: float

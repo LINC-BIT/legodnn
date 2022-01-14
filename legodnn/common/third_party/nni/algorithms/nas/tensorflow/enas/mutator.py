@@ -1,12 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+# pylint: skip-file
+
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Embedding, LSTMCell, RNN
 from tensorflow.keras.losses import SparseCategoricalCrossentropy, Reduction
 
-from nni.nas.tensorflow.mutator import Mutator
-from nni.nas.tensorflow.mutables import LayerChoice, InputChoice, MutableScope
+from ......nni.nas.tensorflow.mutator import Mutator
+from ......nni.nas.tensorflow.mutables import LayerChoice, InputChoice, MutableScope
 
 
 class EnasMutator(Mutator):

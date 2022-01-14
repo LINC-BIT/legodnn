@@ -1,17 +1,17 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import sys
 sys.path.insert(0, '../../')
 sys.setrecursionlimit(100000)
 import torch
-from legodnn import BlockExtractor, BlockTrainer, ServerBlockProfiler, EdgeBlockProfiler, OptimalRuntime
-from legodnn.gen_series_legodnn_models import gen_series_legodnn_models
-from legodnn.utils.dl.common.env import set_random_seed
+from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+from legodnn.common.utils.gen_series_legodnn_models import gen_series_legodnn_models
+from legodnn.common.utils.dl.common.env import set_random_seed
 set_random_seed(0)
-from legodnn.block_detection.model_topology_extraction import topology_extraction
-from legodnn.presets.auto_block_manager import AutoBlockManager
-from legodnn.presets.common_detection_manager_1204_new import CommonDetectionManager
-from legodnn.model_manager.common_anomaly_detection_model_manager import CommonAnomalyDetectionModelManager
+from legodnn.common.detection.model_topology_extraction import topology_extraction
+from legodnn.common.manager.block_manager.auto_block_manager import AutoBlockManager
+from legodnn.common.detection.common_detection_manager_1204_new import CommonDetectionManager
+from legodnn.common.manager.model_manager.common_anomaly_detection_model_manager import CommonAnomalyDetectionModelManager
 
 from cv_task.datasets.anomaly_detection.ganomaly_coil100 import ganomaly_coil100_dataloader
 from cv_task.anomaly_detection.models.ganomaly import ganomaly_coil100_netg
@@ -53,19 +53,19 @@ if __name__ == '__main__':
 
     print('\033[1;36m-------------------------------->    START BLOCK TRAIN\033[0m')
     train_loader, test_loader = ganomaly_coil100_dataloader()
-    block_trainer = BlockTrainer(teacher_model, block_manager, model_manager, compressed_blocks_dir_path,
+    block_trainer = BlockRetrainer(teacher_model, block_manager, model_manager, compressed_blocks_dir_path,
                                  trained_blocks_dir_path, block_training_max_epoch, train_loader, device=device)
     block_trainer.train_all_blocks()
     # exit(0)
-    server_block_profiler = ServerBlockProfiler(teacher_model, block_manager, model_manager,
+    server_block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
                                                 trained_blocks_dir_path, test_loader, model_input_size, device)
     server_block_profiler.profile_all_blocks()
 
 
-    edge_block_profiler = EdgeBlockProfiler(block_manager, model_manager, trained_blocks_dir_path, 
+    edge_block_profiler = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path, 
                                             test_sample_num, model_input_size, device)
     edge_block_profiler.profile_all_blocks()
 
-    optimal_runtime = OptimalRuntime(trained_blocks_dir_path, model_input_size,
+    optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
                                      block_manager, model_manager, device)
     gen_series_legodnn_models(deadline=100, model_size_search_range=[0,12], target_model_num=50, optimal_runtime=optimal_runtime, descendant_models_save_path=descendant_models_dir_path, device=device)

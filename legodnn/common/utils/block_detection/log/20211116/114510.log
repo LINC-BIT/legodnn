@@ -13,13 +13,13 @@ import torch
 import torch.nn as nn
 from torch.nn.modules import module
 from torch.utils import data
-from legodnn.third_party.nni_new.compression.pytorch.utils.shape_dependency import ChannelDependency
+from legodnn.third_party.nni.compression.pytorch.utils.shape_dependency import ChannelDependency
 from torchvision.models import resnet18, vgg16, resnet50
 
 import onnx
 from onnx import shape_inference
 
-from legodnn.third_party.nni_new.common.graph_utils import build_graph, build_module_graph
+from legodnn.third_party.nni.common.graph_utils import build_graph, build_module_graph
 
 import networkx as nx
 import matplotlib.pyplot as plt

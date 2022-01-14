@@ -5,7 +5,7 @@ import sys
 import copy
 sys.path.insert(0, '../../')
 
-from legodnn.utils.dl.common.model import get_model_flops_and_params, get_model_latency, get_model_size, get_model_flops_and_params_by_dummy_input, get_model_device
+from legodnn.common.utils.dl.common.model import get_model_flops_and_params, get_model_latency, get_model_size, get_model_flops_and_params_by_dummy_input, get_model_device
 from legodnn.abstract_model_manager import AbstractModelManager
 from mmdet.apis import single_gpu_test
 from mmcv.parallel import MMDataParallel

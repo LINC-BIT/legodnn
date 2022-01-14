@@ -13,9 +13,9 @@ from gym import spaces
 from schema import Schema, Optional
 
 import nni
-from nni import ClassArgsValidator
-from nni.tuner import Tuner
-from nni.utils import OptimizeMode, extract_scalar_reward
+from .....nni import ClassArgsValidator
+from .....nni.tuner import Tuner
+from .....nni.utils import OptimizeMode, extract_scalar_reward
 
 from .model import Model
 from .util import set_global_seeds

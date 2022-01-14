@@ -6,10 +6,10 @@ import sys
 
 from networkx.classes.function import non_edges
 sys.path.insert(0, '../../')
-from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+from legodnn.common.detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
 from queue import Queue
 from typing import Dict, List
-from legodnn.block_detection.base_block_detection import BaseBlockDetection
+from legodnn.common.detection.base_block_detection import BaseBlockDetection
 COMPRESSED_LAYERS = ['Conv2d', 'Linear', 'ConvTranspose2d'] # 这些是可以被压缩的层
 PARAM_REUSE_LAYERS = COMPRESSED_LAYERS + ['BatchNorm2d'] # 带参数的网络层如果被重用，必须在同一个块内
 
@@ -53,7 +53,7 @@ if __name__=='__main__':
     from mmdet.apis import init_detector
     from mmdet.datasets import replace_ImageToTensor
     from mmdet.datasets.pipelines import Compose
-    from legodnn.utils.dl.common.model import get_module
+    from legodnn.common.utils.dl.common.model import get_module
     import json
     import numpy as np
 
@@ -71,7 +71,7 @@ if __name__=='__main__':
     detector.forward = partial(detector.legodnn_jit_forward)
     detector.eval()
 
-    from legodnn.block_detection.model_topology_extraction import topology_extraction
+    from legodnn.common.detection.model_topology_extraction import topology_extraction
     graph = topology_extraction(detector, (1,3,300,400), device=device)
     graph.print_ordered_node()
     # # graph.show_graph()
@@ -87,7 +87,7 @@ if __name__=='__main__':
 
     block_detection.detection_all_block()
     block_detection.print_components_blocks()
-    # from legodnn.block_detection.block_detection import BlockDetection
+    # from legodnn.common.detection.block_detection import BlockDetection
     # block_detection = BlockDetection(graph, min_compress_num=6, max_compress_num=12) # resnet
     # block_detection.detection_all_block()
     # block_detection.print_blocks()

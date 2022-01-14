@@ -29,7 +29,7 @@ from sklearn.utils.validation import check_is_fitted
 
 import torch
 
-from nni.feature_engineering.feature_selector import FeatureSelector
+from .....nni.feature_engineering.feature_selector import FeatureSelector
 from . import constants
 from .fginitialize import PrepareData
 from .fgtrain import _train

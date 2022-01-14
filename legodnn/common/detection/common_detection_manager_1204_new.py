@@ -71,7 +71,7 @@ if __name__=='__main__':
     from mmdet.apis import init_detector
     from mmdet.datasets import replace_ImageToTensor
     from mmdet.datasets.pipelines import Compose
-    from legodnn.utils.dl.common.model import get_module
+    from legodnn.common.utils.dl.common.model import get_module
     import json
     import numpy as np
 
@@ -86,7 +86,7 @@ if __name__=='__main__':
     detector.forward = partial(detector.legodnn_jit_forward)
     detector.eval()
 
-    from legodnn.block_detection.model_topology_extraction import topology_extraction
+    from legodnn.common.detection.model_topology_extraction import topology_extraction
     model_graph = topology_extraction(detector, (1,3,300,400), device=device)
     model_graph.print_ordered_node()
     # backbone_graph = topology_extraction(get_module(detector, 'backbone'), (1,3,300,400), device=device)

@@ -32,6 +32,8 @@ def parse_time(time):
 def parse_path(experiment_config, config_path):
     '''Parse path in config file'''
     expand_path(experiment_config, 'searchSpacePath')
+    if experiment_config.get('logDir'):
+        expand_path(experiment_config, 'logDir')
     if experiment_config.get('trial'):
         expand_path(experiment_config['trial'], 'codeDir')
         if experiment_config['trial'].get('authFile'):
@@ -55,18 +57,24 @@ def parse_path(experiment_config, config_path):
         expand_path(experiment_config['assessor'], 'codeDir')
     if experiment_config.get('advisor'):
         expand_path(experiment_config['advisor'], 'codeDir')
+        if experiment_config['advisor'].get('classArgs') and experiment_config['advisor']['classArgs'].get('config_space'):
+            expand_path(experiment_config['advisor']['classArgs'], 'config_space')
     if experiment_config.get('machineList'):
         for index in range(len(experiment_config['machineList'])):
             expand_path(experiment_config['machineList'][index], 'sshKeyPath')
     if experiment_config['trial'].get('paiConfigPath'):
         expand_path(experiment_config['trial'], 'paiConfigPath')
 
-    #if users use relative path, convert it to absolute path
+    # If users use relative path, convert it to absolute path.
     root_path = os.path.dirname(config_path)
     if experiment_config.get('searchSpacePath'):
         parse_relative_path(root_path, experiment_config, 'searchSpacePath')
+    if experiment_config.get('logDir'):
+        parse_relative_path(root_path, experiment_config, 'logDir')
     if experiment_config.get('trial'):
-        parse_relative_path(root_path, experiment_config['trial'], 'codeDir')
+        # In AdaptDL mode, 'codeDir' shouldn't be parsed because it points to the path in the container.
+        if experiment_config.get('trainingServicePlatform') != 'adl':
+            parse_relative_path(root_path, experiment_config['trial'], 'codeDir')
         if experiment_config['trial'].get('authFile'):
             parse_relative_path(root_path, experiment_config['trial'], 'authFile')
         if experiment_config['trial'].get('ps'):
@@ -88,18 +96,31 @@ def parse_path(experiment_config, config_path):
         parse_relative_path(root_path, experiment_config['assessor'], 'codeDir')
     if experiment_config.get('advisor'):
         parse_relative_path(root_path, experiment_config['advisor'], 'codeDir')
+        # for BOHB when delivering a ConfigSpace file directly
+        if experiment_config['advisor'].get('classArgs') and experiment_config['advisor']['classArgs'].get('config_space'):
+            parse_relative_path(root_path, experiment_config['advisor']['classArgs'], 'config_space')
+
     if experiment_config.get('machineList'):
         for index in range(len(experiment_config['machineList'])):
             parse_relative_path(root_path, experiment_config['machineList'][index], 'sshKeyPath')
     if experiment_config['trial'].get('paiConfigPath'):
         parse_relative_path(root_path, experiment_config['trial'], 'paiConfigPath')
 
+    # For frameworkcontroller a custom configuration path may be specified
+    if experiment_config.get('frameworkcontrollerConfig'):
+        if experiment_config['frameworkcontrollerConfig'].get('configPath'):
+            parse_relative_path(root_path, experiment_config['frameworkcontrollerConfig'], 'configPath')
+
 def set_default_values(experiment_config):
     if experiment_config.get('maxExecDuration') is None:
         experiment_config['maxExecDuration'] = '999d'
     if experiment_config.get('maxTrialNum') is None:
         experiment_config['maxTrialNum'] = 99999
-    if experiment_config['trainingServicePlatform'] == 'remote':
+    if experiment_config.get('maxTrialDuration') is None:
+        experiment_config['maxTrialDuration'] = '999d'
+    if experiment_config['trainingServicePlatform'] == 'remote' or \
+       experiment_config['trainingServicePlatform'] == 'hybrid' and \
+       'remote' in experiment_config['hybridConfig']['trainingServicePlatforms']:
         for index in range(len(experiment_config['machineList'])):
             if experiment_config['machineList'][index].get('port') is None:
                 experiment_config['machineList'][index]['port'] = 22
@@ -111,4 +132,5 @@ def validate_all_content(experiment_config, config_path):
 
     NNIConfigSchema().validate(experiment_config)
 
-    experiment_config['maxExecDuration'] = parse_time(experiment_config['maxExecDuration'])
+    if 'maxExecDuration' in experiment_config:
+        experiment_config['maxExecDuration'] = parse_time(experiment_config['maxExecDuration'])

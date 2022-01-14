@@ -10,10 +10,10 @@ import json
 import numpy as np
 from schema import And, Optional
 
-from nni.utils import OptimizeMode
+from ......nni.utils import OptimizeMode
 
-from .....compression.pytorch.compressor import Pruner
-from .....compression.pytorch.utils.config_validation import CompressorSchema
+from ......nni.compression.pytorch.compressor import Pruner
+from ......nni.compression.pytorch.utils.config_validation import PrunerSchema
 from .constants_pruner import PRUNER_DICT
 
 
@@ -54,7 +54,7 @@ class SimulatedAnnealingPruner(Pruner):
     optimize_mode : str
         Optimize mode, `maximize` or `minimize`, by default `maximize`.
     base_algo : str
-        Base pruning algorithm. `level`, `l1` or `l2`, by default `l1`. Given the sparsity distribution among the ops,
+        Base pruning algorithm. `level`, `l1`, `l2` or `fpgm`, by default `l1`. Given the sparsity distribution among the ops,
         the assigned `base_algo` is used to decide which filters/channels/weights to prune.
     start_temperature : float
         Start temperature of the simulated annealing process.
@@ -115,16 +115,18 @@ class SimulatedAnnealingPruner(Pruner):
         """
 
         if self._base_algo == 'level':
-            schema = CompressorSchema([{
-                'sparsity': And(float, lambda n: 0 < n < 1),
+            schema = PrunerSchema([{
+                Optional('sparsity'): And(float, lambda n: 0 < n < 1),
                 Optional('op_types'): [str],
                 Optional('op_names'): [str],
+                Optional('exclude'): bool
             }], model, _logger)
-        elif self._base_algo in ['l1', 'l2']:
-            schema = CompressorSchema([{
-                'sparsity': And(float, lambda n: 0 < n < 1),
+        elif self._base_algo in ['l1', 'l2', 'fpgm']:
+            schema = PrunerSchema([{
+                Optional('sparsity'): And(float, lambda n: 0 < n < 1),
                 'op_types': ['Conv2d'],
-                Optional('op_names'): [str]
+                Optional('op_names'): [str],
+                Optional('exclude'): bool
             }], model, _logger)
 
         schema.validate(config_list)
@@ -152,7 +154,7 @@ class SimulatedAnnealingPruner(Pruner):
         # a layer with more weights will have no less pruning rate
         for idx, wrapper in enumerate(self.get_modules_wrapper()):
             # L1Filter Pruner requires to specify op_types
-            if self._base_algo in ['l1', 'l2']:
+            if self._base_algo in ['l1', 'l2', 'fpgm']:
                 config_list.append(
                     {'sparsity': sparsities[idx], 'op_types': ['Conv2d'], 'op_names': [wrapper.name]})
             elif self._base_algo == 'level':

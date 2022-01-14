@@ -22,7 +22,7 @@ from fn3_channel_open_api_1215.fn3_channel import set_fn3_channel_channels, expo
 sys.path.insert(0, '/data/zql/legodnn-rtss-baselines/cgnet')
 from cgnet_open_api_1212 import convert_model_to_cgnet, add_cgnet_loss, get_cgnet_flops_save_ratio, get_cgnet_flops_save_ratio
 
-from legodnn.utils.dl.common.model import get_module
+from legodnn.common.utils.dl.common.model import get_module
 # from baselines.nested_network.nestdnn_1230.nestdnn_open_api import zero_grads_nestdnn_layers, freeze_no_nestdnn_layers
 
 @RUNNERS.register_module()

@@ -8,8 +8,8 @@ import re
 from collections import deque
 
 import numpy as np
-from nni.tuner import Tuner
-from nni.algorithms.nas.pytorch.classic_nas.mutator import LAYER_CHOICE, INPUT_CHOICE
+from ......nni.tuner import Tuner
+from ......nni.algorithms.nas.pytorch.classic_nas.mutator import LAYER_CHOICE, INPUT_CHOICE
 
 
 _logger = logging.getLogger(__name__)

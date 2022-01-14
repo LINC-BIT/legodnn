@@ -18,8 +18,7 @@ logger.setLevel(logging.INFO)
 
 
 class SensitivityAnalysis:
-    def __init__(self, model, val_func, sparsities=None, prune_type='l1', early_stop_mode=None, early_stop_value=None,
-                 train_loader=None):
+    def __init__(self, model, val_func, sparsities=None, prune_type='l1', early_stop_mode=None, early_stop_value=None):
         """
         Perform sensitivity analysis for this model.
         Parameters
@@ -64,7 +63,7 @@ class SensitivityAnalysis:
             This value is effective only when the early_stop_mode is set.
 
         """
-        from nni.algorithms.compression.pytorch.pruning.constants_pruner import PRUNER_DICT
+        from .....nni.algorithms.compression.pytorch.pruning.constants_pruner import PRUNER_DICT
 
         self.model = model
         self.val_func = val_func
@@ -88,8 +87,6 @@ class SensitivityAnalysis:
         # for each layer
         self.already_pruned = {}
         self.model_parse()
-
-        self.train_loader = train_loader
 
     @property
     def layers_count(self):
@@ -187,10 +184,7 @@ class SensitivityAnalysis:
                 # according to the op_names
                 cfg = [{'sparsity': real_sparsity, 'op_names': [
                     name], 'op_types': ['Conv2d']}]
-                if self.train_loader:
-                    pruner = self.Pruner(self.model, cfg, train_loader=self.train_loader)
-                else:
-                    pruner = self.Pruner(self.model, cfg)
+                pruner = self.Pruner(self.model, cfg)
                 pruner.compress()
                 val_metric = self.val_func(*val_args, **val_kwargs)
                 logger.info('Layer: %s Sparsity: %.2f Validation Metric: %.4f',

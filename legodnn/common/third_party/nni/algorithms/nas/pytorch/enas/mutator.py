@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from nni.nas.pytorch.mutator import Mutator
-from nni.nas.pytorch.mutables import LayerChoice, InputChoice, MutableScope
+from ......nni.nas.pytorch.mutator import Mutator
+from ......nni.nas.pytorch.mutables import LayerChoice, InputChoice, MutableScope
 
 
 class StackedLSTMCell(nn.Module):

@@ -1,0 +1,1 @@
+from cv_task.anomaly_detection.methods.ornet.anomaly_score_learner.main import AnomalyScoreLearner

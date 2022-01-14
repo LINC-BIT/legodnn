@@ -28,7 +28,7 @@ def selection_r(acquisition_function,
     Selecte R value
     '''
     minimize_starting_points = [lib_data.rand(x_bounds, x_types) \
-                                for i in range(0, num_starting_points)]
+                                    for i in range(0, num_starting_points)]
     outputs = selection(acquisition_function, samples_y_aggregation,
                         x_bounds, x_types, regressor_gp,
                         minimize_starting_points,
