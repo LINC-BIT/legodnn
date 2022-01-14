@@ -197,15 +197,21 @@ Get install params according to the selection in the official site,and copy them
 	pip install -r requirements.txt
 	```
 
-4. Docker（Docker image is not finished yet）
+4. Docker
    
 	 Using docker
 	**Note that these Docker images do not support GPU**
-	|Raspberry pi 4B(aarch64)|Jeston TX2(armv8)|
-	|----|----|
-	|`docker run -it lincbit/legodnn:raspberry4B-1.0`|`docker run -it lincbit/legodnn:jetsontx2-1.0`|
+	|Raspberry pi 4B or Jeston TX2|
+	|----|
+	|`docker run -it bitlinc/legodnn:aarch64-1.0`|
 
-
+**Note! You should specify a cbc path for some devices in the `init` method of `online/scaling_optimizer.py`,like this:**
+```python
+pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
+```
+	
+  **if your device does not  have a cbc command in `/usr/bin`,you should run `apt-get install  coinor-cbc` to install it.**
+   
 ## 3 Repository of DNNs in vision tasks
 ### 3.1 Supported models 
 
