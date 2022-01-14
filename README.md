@@ -322,7 +322,15 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 ## 4 Demo Video and experiment data
 
-[![LegoDNN Demo](https://res.cloudinary.com/marcomontalbano/image/upload/v1642141209/video_to_markdown/images/youtube--28S7ZB64ECc-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://www.youtube.com/watch?v=28S7ZB64ECc "LegoDNN Demo")
+
+
+
+
+
+
+https://user-images.githubusercontent.com/73862727/149461803-4ee5479e-df34-4110-8e6b-955d7b803695.mp4
+
+
 
 
 
