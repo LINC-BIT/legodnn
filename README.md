@@ -34,7 +34,7 @@
 
 ## 1 Introduction
 
- At present, LegoDNN ([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)) includes six kinds of widely used visual DNN applications, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation. The DNNs in all visual applications contain a large number of convolution layers and blocks.  
+ At present, [LegoDNN](https://dl.acm.org/doi/abs/10.1145/3447993.3483249) includes six kinds of widely used visual DNN applications, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation. The DNNs in all visual applications contain a large number of convolution layers and blocks.  
 
 ![image](https://user-images.githubusercontent.com/73862727/146324643-f0ddfbcc-dfd7-4ef4-b5d3-0e3600e984d0.png)
 
