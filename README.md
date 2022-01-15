@@ -215,12 +215,12 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 ### 3.1 Supported models 
 
 
-** Image classfication**
+**Image classfication**
   
-  ||Model Name|Data|
-  |--|--|--|
-  |&#9745;|[ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
-  |&#9745;|[MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  ||Model Name|Data|Script|
+  |--|--|--|--|
+  |&#9745;|[ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/legodnn_resnet_test.py)|
+  |&#9745;|[MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)||
   |&#9745;|[ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
   |&#9745;|[InceptionV3(CVPR'2016)](https://ieeexplore.ieee.org/document/7780677/)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
   |&#9745;|[WideResNet (BMVC'2016)](https://dx.doi.org/10.5244/C.30.87)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
@@ -362,6 +362,13 @@ https://user-images.githubusercontent.com/73862727/149520527-50c26e84-cd30-426e-
 
 ### 4.2 Experiment data
 
+#### 4.2.1 Experiment setting
+
+|Device|Models and data|Baseline|
+|--|--|--|
+|System:Ubuntu 18.04.4 LTS<br>CPU:Intel(R) Xeon(R) Silver 4216 CPU @ 2.10GHz<br>GPU:Quadro RTX8000|ResNet18 on CIFAR100<br>MobileNetV2 on CIFAR100<br>GPNomaly on Coil100<br>ResNet18 on UCSD Ped1<br>Faster-RCNN-ResNet50 on PARSCAL VOC2007<br>YoloV3-DarkNet53 on PARSCAL VOC2007<br>FCN-ResNet18 on PARSCAL VOC2012<br>DeepPose-ResNet18 on MPII<br>TSN-ResNet18 on HDMB51<br>TRN-ResNet18 on HDMB|Filter Pruning<br>Low Rank Decomposition<br>Knowledge Distillation<br>NestDNN<br>US-Net<br>FN3-channel<br>OFA
+
+#### 4.2.2 Experiment result
 
 ![实验图](https://user-images.githubusercontent.com/73862727/149600656-f9c1f1a4-a503-4b1e-94c3-8454b6aeeb92.png)
 
