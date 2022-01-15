@@ -31,27 +31,26 @@
 
 ## 1 Introduction
 
- At present, there are six kinds of visual DNN applications widely used, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation.  The six visual DNN applications all contain a large number of convolution layers.  
+ At present, LegoDNN (https://dl.acm.org/doi/abs/10.1145/3447993.3483249) includes six kinds of widely used visual DNN applications, including image classification, semantic segmentation, object detection, action recognition, anomaly detection and pose estimation. The DNNs in all visual applications contain a large number of convolution layers and blocks.  
 
 ![image](https://user-images.githubusercontent.com/73862727/146324643-f0ddfbcc-dfd7-4ef4-b5d3-0e3600e984d0.png)
 
 	
- - **Image classification** is an image processing method to distinguish different categories of object from an image. The method first takes an image as input, then extracts the image's feature via convolutional layers, and finally outputs the probability of categories via fully connected layers. Take ResNet18 as example, which is shown in Figure (a), it can be divided into three parts: root, four stages and fully connected layer. Other applications use Resent18 pre-trained by ImageNet to extract image features, and make further modifications on the four stages. The pre-trained ResNet18 is so called Backbone. 
+ - **Image classification** applications distinguish different categories of object from an image. The method first takes an image as input, then extracts the image's feature via convolutional layers, and finally outputs the probability of categories via fully connected layers. Take ResNet18 as example, which is shown in Figure (a), it can be divided into three parts: root, four stages and fully connected layer. Other applications use Resent18 pre-trained by ImageNet to extract image features, and make further modifications on the four stages. The pre-trained ResNet18 is so called Backbone. 
 
-- **Semantic segmentation** is aimed to classify pixels of an image, and has been widely used in the medical image field and unmanned vehicles field. A semantic segmentation network is usually based on an encoder-decoder structure; Figure (b) shows a classical FCN model structure. The same as the object detection network, encoder is used to extract features of images, corresponding to the root convolution layer and for stages on the left side of figure (b).Its decoder is used to gradually restore the missing information of encoder,corresponding to the remaining convolution layers on the right side of figure(b). 
+- **Semantic segmentation** applications are widely used in medical images and driverless scenes. A typical DNN model has an  encoder-decoder structure, in which the encoder corresponds to an image classification network and the decoder varies across different DNNs. For example, in fully convolutional networks (FCN)~\cite{long2015fully} (Figure (b)), the encoder corresponds to the four stages in ResNet and the decoder contains four convolution layers.
 
-- **Object detection** is used to detect coordinates of the frames containing objects (e.g., people, dogs, cars) and recognize the objects. Its mainstream networks can be divided into three parts: Backbone, net and detector. Figure (c) shows a popular object detection network YOLO-V3. Its backbone is a ResNet18 which is divided into two parts :a root convolution layer and four stages here.Its detector is the two conected convolution layers before each output.And all the remaining convolution layers form the net.  
+- **Object detection** applications detect coordinates of the frames containing objects (e.g., people, dogs, cars) and recognize the objects. Its mainstream networks can be divided into three parts: Backbone, net and detector. Figure (c) shows a popular object detection network YOLO-V3. Its backbone is a ResNet18 which is divided into two parts :a root convolution layer and four stages here. Its detector is the two conected convolution layers before each output. All the remaining convolution layers form the net.  
 
-- **Action recognition**  can recognize an object's actions in video clips, such as speaking, waving, etc. As shown in Figure (d), a classical two-stream convolutional networks for action recognition in videos is presented. The network is divided into spatial convolutional network and temporal convolutional network, both of which use image classification networks to perform classification tasks.
+- **Action recognition** applications recognize an object's actions in video clips, such as speaking, waving, etc. As shown in Figure (d), a classical two-stream convolutional networks is presented. The network is divided into spatial convolutional network and temporal convolutional network, both of which use image classification networks to perform classification tasks.
  
- - **Anomaly detection**  is used to detect anomalies in data, particularly the image and video data. This network can be divided into two categories: (1) self-training-based model; (2) GAN-based model. As shown in Figure (e1) and Figure (e2), self-training-based model uses ResNet18 to extracts data's feature, uses fully connected layer to make prediction; GAN-based model is a simple and symmetric AutoEncoder model.
+ - **Anomaly detection** applications detect anomalies in data, particularly the image and video data. This network can be divided into two categories: (1) self-training-based model; (2) GAN-based model. As shown in Figure (e1) and Figure (e2), self-training-based model uses ResNet18 to extract data's feature, use fully connected layer to make prediction; GAN-based model is a simple and symmetric AutoEncoder model.
 
-	
 	
  - **Pose estimation** focuses on the problem of identifying the orientation of a 3-D object. It has been widely used in many fields such as robot vision, motion tracking, etc. The mainstream pose estimation networks are mainly divided into two categories. The first one first detects an object from an image, and then detects the key points of the object. Network structure of this category is similar to objection detection's. In contrast, the second one first finds the key points and then groups the points. In this way, it can obtain the detect results. Network structure of the second one is similar to semantic segmentation's.
 	
  
-LegoDNN([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249))is a lightweight, block-grained and scalable solution for running multi-DNN wrokloads in mobile vision systems. It extracts the blocks of original models via convolutional layers, generates sparse blocks, and retrains the sparse blocks. By composing these blocks, LegoDNN expands the scaling options of original models. At runtime, it optimizes the block selection process using optimization algorithms. The following figure shows a LegoDNN example of ResNet18. This project is a PyTorch-based implementation of LegoDNN, and allow to convert the deep neural networks in the above six mainstream applications to LegoDNN. With the LegoDNN, original models are able to dynamically scale at the edge, and adapt to the change of device resources.
+LegoDNN([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249))is a lightweight, block-grained and scalable solution for running multi-DNN wrokloads in mobile vision systems. It extracts the blocks of original models via convolutional layers, generates sparse blocks, and retrains the sparse blocks. By composing these blocks, LegoDNN expands the scaling options of original models. At runtime, it optimizes the block selection process using optimization algorithms. The following figure shows a LegoDNN example of ResNet18. This project is a PyTorch-based implementation of LegoDNN, and allows to convert the deep neural networks in the above six mainstream applications to LegoDNN. With  LegoDNN, original models are able to dynamically scale at edge, and adapt to changing device resources.
   
 
 
@@ -65,11 +64,11 @@ LegoDNN([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249))is a lightwe
  ### 1.1 Major features
 - **Modular Design**
 
-  This project decomposes  the block extracting,retraining and selecting processes of legodnn into various modules. Users can  convert their own custom model to legodnn more conveniently by using these module components.  
+  This project decomposes the block extracting, retraining and selecting processes of legodnn into various modules. Users can convert their own custom model to legodnn more conveniently by using these module components.  
   
 - **Automatic extraction of blocks**
     
-    This project has implemented a general block extraction algorithm, supporting the automatic block extraction of the models in image classification, target detection, semantic segmentation, attitude estimation, behavior recognition, anomaly detection applications.
+    This project has implemented a general block extraction algorithm, supporting the automatic block extraction of the models in image classification, target detection, semantic segmentation, attitude estimation, behavior recognition, and anomaly detection applications.
 
 ### 1.2 Architecture
 
@@ -77,10 +76,10 @@ LegoDNN([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249))is a lightwe
  <img src="https://user-images.githubusercontent.com/73862727/146190146-32de7e60-1406-4f68-8645-f39854b5dc29.png" />
 </div>
 
- **Architecture of legodnn** is split into offline stage and online stage.
+ **Architecture of legodnn** is split into the offline stage and the online stage.
 
 - Offline Stage：
-	- At the offline stage, the `block extrator` extracts the original blocks from orginal models, and feeds them to the `decendant block generator` module to generate descendant blocks. Then the `block retrainer` module retrains the descendant blocks. Finally, the `block profiler` module profiles all blocks' accuracy and memory information.
+	- At the offline stage, the`block extrator`identifies the original/uncompressed blocks from a DNN model, and feeds them to the `decendant block generator` module to produce descendant blocks. The `block retrainer` module then retrains the descendant blocks. Finally, the `block profiler` module profiles all blocks' accuracies, memory and latency information.
 
 - Online Stage：
 	- At the online stage, the `latency estimator` module estimates latencies of the blocks at edge devices, then sends these latencies with the accuracy and memory information together to the `scaling optimater` module to optimally select blocks. Finally, the `block swicher` module replaces the corresponding blocks in the model with the selected blocks at runtime.
@@ -89,9 +88,9 @@ LegoDNN([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249))is a lightwe
 **Module details**
 - **BlockManager**: this module integrates `block extractor`, `descendant block generator`, and `block switcher`. The block extractor is responsible for extracting original blocks from an original model's convolution layers. The descendant block generator is responsible for pruning the original blocks to generate multiple sparsity descendant blocks. The block switcher is responsible for replacing blocks with optimal blocks at run time, where the optimal blocks are selected by optimization algorithms. With the AutoBlockManager, this project has implemented automatic extraction of blocks for various models.
 - **BlockRetrainer**：this module is used to retrain descendant models to inprove their accuracies. The retraining takes the intermediate data as training data and the sparse blocks as models; the intermediate data is generated by original models as well as original training data; the sparse blocks are generated by original models. The retraining process is quite fast because it only used the intermediate data, reducing the model computation. Meanwhile, these intermediate data can be used in parallel to train the descendant blocks generated from the same original blocks.
-- **BlockProfile**：this module is used to generate analysis and statistics information of the block size, accuracy, etc. The size of a block is the memory it occupies. Since the accuracy loss of a block is different in different combined models, this module selects k different size combined models that contains the block to calculate it.
-- **LatencyProfile**：this module is used to analyze the latency reduction percentage of the blocks in edge devices. The inference latency is obtained by simulating each block's inference in edge device directly. The latency reduction percentage of each block is calculated by using the following formula: (latency of the original block - latency of the currently derived block)/latency of the original block.
-- **ScailingOptimizer**：this module is used to update and optimize the blocks in real time. By formalizing the block selection as an integer linear programming optimization problem and resolving it in a real time, we can continuously obtain the model that owns the maximal accuracy and satisfies the conditions of specific latency and memory limitation.
+- **BlockProfile**：this module is used to generate analysis and statistics information of the block size, accuracy, etc. The size of a block is the memory it occupies. Since the accuracy loss of a block is different in different combined models, this module selects k different sizes in profiling.
+- **LatencyProfile**：this module is used to analyze the latency reduction percentage of the blocks on edge devices. The inference latency is obtained by simulating each block's inference on edge device directly. The latency reduction percentage of each block is calculated by using the following formula: (latency of the original block - latency of the currently derived block)/latency of the original block.
+- **ScailingOptimizer**：this module is used to update and optimize the blocks in real time. By formalizing the block selection as an integer linear programming optimization problem and resolving it in real time, we can continuously obtain the model that owns the maximal accuracy and satisfies the conditions of specific latency and memory limitation.
 
 ## 2 Code and Installation
 ### 2.1 Code
@@ -389,8 +388,21 @@ https://user-images.githubusercontent.com/73862727/149520527-50c26e84-cd30-426e-
 ![实验图](https://user-images.githubusercontent.com/73862727/149600656-f9c1f1a4-a503-4b1e-94c3-8454b6aeeb92.png)
 
 
+## 5 Project member and contact information
 
+### 5.1 Project member
 
+#### 5.1.1 Beijing Institute of Technology
+Rui Han, Qinglong Zhang, Gaofeng Xin, Xinyu Guo, Yuxiao Liu, Chi Harold Liu, Guoren Wang
+
+#### 5.1.2 TU Delft
+Lydia Y.~Chen
+
+#### 5.1.3 Midea Group
+Jian Tang
+
+### 5.2 Contact information
+Rui Han: 379068433@qq.com
 
 ## License
 
