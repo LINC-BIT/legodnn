@@ -56,7 +56,10 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 
 
  <div align="center" padding="10">
-   <img src="https://user-images.githubusercontent.com/73862727/146643884-fcb3f56a-c4d3-457c-9b6e-b930a2720d5c.png"/>
+	
+  
+
+   <img src="https://user-images.githubusercontent.com/73862727/149609666-602d961e-ff28-4042-9492-5e4b19774f2d.png"/>
  </div>
  
  ### 1.1 Major features
