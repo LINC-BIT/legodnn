@@ -28,6 +28,9 @@
   * [3.2 Full examples](#32-full-examples)
   * [3.3 How to implement new models in LegoDNN](#33-how-to-implement-new-models-in-legodnn)
 - [4 Demo Video and experiment data](#4-demo-video-and-experiment-data)
+- [5 Project member and contact information](#5 Project member and contact information)
+  * [5.1 Project member](#51-Project member)
+  * [5.2 Contact information](#52-Contact information)
 
 ## 1 Introduction
 
