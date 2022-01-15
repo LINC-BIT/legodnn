@@ -349,10 +349,10 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 ```
 
-## 4 Demo Video and experiment data
+## 4 Demo video and experiment data
 
 
-
+### 4.1 Demo Video
 
 
 
@@ -360,8 +360,10 @@ def get_model_latency(self, model: torch.nn.Module, sample_num: int, model_input
 
 https://user-images.githubusercontent.com/73862727/149520527-50c26e84-cd30-426e-94ca-a0886d104386.mp4
 
+### 4.2 Experiment data
 
 
+![实验图](https://user-images.githubusercontent.com/73862727/149600656-f9c1f1a4-a503-4b1e-94c3-8454b6aeeb92.png)
 
 
 
