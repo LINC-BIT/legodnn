@@ -14,7 +14,7 @@ from ..common.utils.common.data_record import read_yaml
 
 
 
-class LagencyEstimator:
+class LatencyEstimator:
     def __init__(self, block_manager: AbstractBlockManager, model_manager: AbstractModelManager, 
                  trained_blocks_dir, test_sample_num, dummy_input_size,
                  device):

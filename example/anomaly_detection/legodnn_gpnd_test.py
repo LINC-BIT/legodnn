@@ -4,7 +4,7 @@ import sys
 sys.path.insert(0, '../../')
 sys.setrecursionlimit(100000)
 import torch
-from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+from legodnn import BlockRetrainer, BlockProfiler, LatencyEstimator, ScalingOptimizer
 from legodnn.common.utils.gen_series_legodnn_models import gen_series_legodnn_models
 from legodnn.common.utils.dl.common.env import set_random_seed
 set_random_seed(0)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     server_block_profiler.profile_all_blocks()
 
 
-    edge_block_profiler = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path, 
+    edge_block_profiler = LatencyEstimator(block_manager, model_manager, trained_blocks_dir_path, 
                                             test_sample_num, model_input_size, device)
     edge_block_profiler.profile_all_blocks()
 

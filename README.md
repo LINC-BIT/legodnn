@@ -38,7 +38,7 @@
 	
  - **Image classification** is an image processing method to distinguish different categories of object from an image. The method first takes an image as input, then extracts the image's feature via convolutional layers, and finally outputs the probability of categories via fully connected layers. Take ResNet18 as example, which is shown in Figure (a), it can be divided into three parts: root, four stages and fully connected layer. Other applications use Resent18 pre-trained by ImageNet to extract image features, and make further modifications on the four stages. The pre-trained ResNet18 is so called Backbone. 
 
-- **Semantic segmentation** is aimed to classify pixels of an image, and has been widely used in the medical image field and unmanned vehicles field. A semantic segmentation network is usually based on an encoder-decoder structure; Figure (b) shows a classical FCN model structure. The same as the object detection network, encoder is used to extract features of images ,corresponding to the root convolution layer and for stages on the left side of figure (b).Its decoder is used to gradually restore the missing information of encoder,corresponding to the remaining convolution layers on the right side of figure(b). 
+- **Semantic segmentation** is aimed to classify pixels of an image, and has been widely used in the medical image field and unmanned vehicles field. A semantic segmentation network is usually based on an encoder-decoder structure; Figure (b) shows a classical FCN model structure. The same as the object detection network, encoder is used to extract features of images, corresponding to the root convolution layer and for stages on the left side of figure (b).Its decoder is used to gradually restore the missing information of encoder,corresponding to the remaining convolution layers on the right side of figure(b). 
 
 - **Object detection** is used to detect coordinates of the frames containing objects (e.g., people, dogs, cars) and recognize the objects. Its mainstream networks can be divided into three parts: Backbone, net and detector. Figure (c) shows a popular object detection network YOLO-V3. Its backbone is a ResNet18 which is divided into two parts :a root convolution layer and four stages here.Its detector is the two conected convolution layers before each output.And all the remaining convolution layers form the net.  
 
@@ -51,7 +51,7 @@
  - **Pose estimation** focuses on the problem of identifying the orientation of a 3-D object. It has been widely used in many fields such as robot vision, motion tracking, etc. The mainstream pose estimation networks are mainly divided into two categories. The first one first detects an object from an image, and then detects the key points of the object. Network structure of this category is similar to objection detection's. In contrast, the second one first finds the key points and then groups the points. In this way, it can obtain the detect results. Network structure of the second one is similar to semantic segmentation's.
 	
  
-LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lightweight, block-grained and scalable solution for running multi-DNN wrokloads in mobile vision systems. It extracts the blocks of original models via convolutional layers, generates sparse blocks, and retrains the sparse blocks. By composing these blocks, LegoDNN expands the scaling options of original models. At runtime, it optimizes the block selection process using optimization algorithms. The following figure shows a LegoDNN example of ResNet18. This project is a PyTorch-based implementation of LegoDNN, and allow to convert the deep neural networks in the above six mainstream applications to LegoDNN. With the LegoDNN, original models are able to dynamically scale at the edge, and adapt to the change of device resources.
+LegoDNN([Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249))is a lightweight, block-grained and scalable solution for running multi-DNN wrokloads in mobile vision systems. It extracts the blocks of original models via convolutional layers, generates sparse blocks, and retrains the sparse blocks. By composing these blocks, LegoDNN expands the scaling options of original models. At runtime, it optimizes the block selection process using optimization algorithms. The following figure shows a LegoDNN example of ResNet18. This project is a PyTorch-based implementation of LegoDNN, and allow to convert the deep neural networks in the above six mainstream applications to LegoDNN. With the LegoDNN, original models are able to dynamically scale at the edge, and adapt to the change of device resources.
   
 
 
@@ -65,7 +65,7 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
  ### 1.1 Major features
 - **Modular Design**
 
-  This project decomposes  the block extracting,retraining and selecting processes of legodnn into various modules. Users can  conver their own custom model to legodnn more conveniently by using these module components.  
+  This project decomposes  the block extracting,retraining and selecting processes of legodnn into various modules. Users can  convert their own custom model to legodnn more conveniently by using these module components.  
   
 - **Automatic extraction of blocks**
     
@@ -96,14 +96,14 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 ## 2 Code and Installation
 ### 2.1 Code
 **Offline stage**
-1. Import components and initialize seed feed
+1. Import components and initialize seed 
 	```python
 	import os
 	os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 	import sys
 	sys.setrecursionlimit(100000)
 	import torch
-	from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+	from legodnn import BlockRetrainer, BlockProfiler, LatencyEstimator, ScalingOptimizer
 	from legodnn.common.utils.gen_series_legodnn_models import gen_series_legodnn_models
 	from legodnn.common.utils.dl.common.env import set_random_seed
 	set_random_seed(0)
@@ -115,12 +115,12 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 	from cv_task.datasets.image_classification.cifar_dataloader import CIFAR10Dataloader, CIFAR100Dataloader
 	from cv_task.image_classification.cifar.models import resnet18
 	```
-2. Initialize orginal model
+2. Initialize original model
 	```python
 	teacher_model = resnet18(num_classes=100).to(device)
     teacher_model.load_state_dict(torch.load('data/model/resnet110/resnet18.pth')['net'])
 	```
-3. Extract the blocks automatically ,then generate descendant blocks and save the blocks to disk using AutoBlockManager
+3. Extract the blocks automatically, then generate descendant blocks and save the blocks to disk using AutoBlockManager
 	```python
 	cv_task = 'image_classification'
 	dataset_name = 'cifar100'
@@ -165,25 +165,25 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 	```
 5. Get the profiles about accuracy and memory of the blocks.
 	```python
-	trained_blocks_dir_path = root_path + '/trained'         # 指定训练后块的存储位置 
+	trained_blocks_dir_path = root_path + '/trained'         
 	block_profiler = BlockProfiler(teacher_model, block_manager, model_manager,
 											  trained_blocks_dir_path, test_loader, model_input_size, device)
 	block_profiler.profile_all_blocks()
 	```
 
 **Online stage**
-1. Estimate latency time of the block 
+1. Estimate latency of the block 
 	```python
 	test_sample_num = 100
-	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+	latency_estimator = LatencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 					     test_sample_num, model_input_size, device)
-	lagency_estimator.profile_all_blocks()
+	latency_estimator.profile_all_blocks()
 	```
 2. Select the blocks optimally
 	```python
-	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+	latency_estimator = LatencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 								   test_sample_num, model_input_size, device)
-	lagency_estimator.profile_all_blocks()
+	latency_estimator.profile_all_blocks()
 	optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
 					   block_manager, model_manager, device)
 	optimal_runtime.update_model(10, 4.5 * 1024 ** 2)
@@ -191,7 +191,7 @@ LegoDNN（[Paper](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）is a lig
 	
 ### 2.2 Installation
 **Prerequisites**
-- Linux 和 Windows 
+- Linux and Windows 
 - Python 3.6+
 - PyTorch 1.9+
 - CUDA 10.2+ 
@@ -292,7 +292,7 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 
 ### 3.3 How to implement new models in LegoDNN
 
-The model have particular training need to impletment a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`.
+The model have particular training need to implement a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`.
 
 ```python
 class AbstractModelManager(abc.ABC):

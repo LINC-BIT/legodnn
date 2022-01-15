@@ -113,7 +113,7 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
 1. 引入组件，初始化随机种子
 	```python
 	import torch
-	from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+	from legodnn import BlockRetrainer, BlockProfiler, LatencyEstimator, ScalingOptimizer
 	from legodnn.common.utils.dl.common.env import set_random_seed
 	set_random_seed(0)
 	from legodnn.common.manager.block_manager.auto_block_manager import AutoBlockManager
@@ -173,15 +173,15 @@ LegoDNN（[文章](https://dl.acm.org/doi/abs/10.1145/3447993.3483249)）是一�
 1. 对延迟进行计算和估计
 	```python
 	test_sample_num = 100
-	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+	latency_estimator = LatencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 							   test_sample_num, model_input_size, device)
-	lagency_estimator.profile_all_blocks()
+	latency_estimator.profile_all_blocks()
 	```
 2. 在具体的内存大小和推理延迟的条件下选择具体的块来构建模型
 	```python
-	lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+	latency_estimator = LatencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
 								   test_sample_num, model_input_size, device)
-	lagency_estimator.profile_all_blocks()
+	latency_estimator.profile_all_blocks()
 	optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
 										   block_manager, model_manager, device)
 	optimal_runtime.update_model(10, 4.5 * 1024 ** 2)

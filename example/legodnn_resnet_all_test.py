@@ -5,7 +5,7 @@ sys.path.insert(0, r'.')
 sys.setrecursionlimit(100000)
 
 import torch
-from legodnn import BlockRetrainer, BlockProfiler, LagencyEstimator, ScalingOptimizer
+from legodnn import BlockRetrainer, BlockProfiler, LatencyEstimator, ScalingOptimizer
 from legodnn.common.utils.dl.common.env import set_random_seed
 set_random_seed(0)
 from legodnn.common.manager.block_manager.auto_block_manager import AutoBlockManager
@@ -53,9 +53,9 @@ if __name__ == '__main__':
     # block_profiler.profile_all_blocks()
     
     test_sample_num = 100
-    lagency_estimator = LagencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
+    latency_estimator = LatencyEstimator(block_manager, model_manager, trained_blocks_dir_path,
                                test_sample_num, model_input_size, device)
-    lagency_estimator.profile_all_blocks()
+    latency_estimator.profile_all_blocks()
     
     optimal_runtime = ScalingOptimizer(trained_blocks_dir_path, model_input_size,
                                        block_manager, model_manager, device)
