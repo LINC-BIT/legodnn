@@ -396,13 +396,13 @@ https://user-images.githubusercontent.com/73862727/149520527-50c26e84-cd30-426e-
 ### 5.1 Project member
 
 #### 5.1.1 Beijing Institute of Technology
-Rui Han, Qinglong Zhang, Gaofeng Xin, Xinyu Guo, Yuxiao Liu, Chi Harold Liu, Guoren Wang
+[Rui Han](https://sites.google.com/site/hanruisystem/), Qinglong Zhang, Gaofeng Xin, Xinyu Guo, Yuxiao Liu, Chi Harold Liu, Guoren Wang
 
 #### 5.1.2 TU Delft
-Lydia Y.~Chen
+[Lydia Y.~Chen](https://www.lydiaychen.com/)
 
-#### 5.1.3 Midea Group
-Jian Tang
+#### 5.1.3 Midea Group and Syracuse University
+[Jian Tang](https://ecs.syr.edu/faculty/tang/)
 
 ### 5.2 Contact information
 Rui Han: 379068433@qq.com
