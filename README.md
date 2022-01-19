@@ -382,11 +382,11 @@ https://user-images.githubusercontent.com/73862727/149520527-50c26e84-cd30-426e-
 
 #### 4.2.1 Experiment setting
 
-|Device|Models and data|Baseline|
+|Devices|Models and data|Baselines|
 |--|--|--|
 |Ubuntu 18.04.4 LTS<br>Intel(R) Xeon(R) Silver 4216 CPU @ 2.10GHz<br>Quadro RTX8000|ResNet18 on CIFAR100<br>MobileNetV2 on CIFAR100<br>GPNomaly on Coil100<br>ResNet18 on UCSD Ped1<br>Faster-RCNN-ResNet50 on PARSCAL VOC2007<br>YoloV3-DarkNet53 on PARSCAL VOC2007<br>FCN-ResNet18 on PARSCAL VOC2012<br>DeepPose-ResNet18 on MPII<br>TSN-ResNet18 on HDMB51<br>TRN-ResNet18 on HDMB|Filter Pruning<br>Low Rank Decomposition<br>Knowledge Distillation<br>NestDNN<br>US-Net<br>FN3-channel<br>OFA
 
-#### 4.2.2 Experiment result
+#### 4.2.2 Experiment result (x axis for available memory and y axis for inference accuracy)
 
 ![实验图](https://user-images.githubusercontent.com/73862727/149600656-f9c1f1a4-a503-4b1e-94c3-8454b6aeeb92.png)
 
