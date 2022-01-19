@@ -71,7 +71,7 @@ LegoDNN is a lightweight, block-grained and scalable solution for running multi-
   
 - **Automatic extraction of blocks**
     
-    This project has implemented a general block extraction algorithm, supporting the automatic block extraction of the models in image classification, target detection, semantic segmentation, attitude estimation, behavior recognition, and anomaly detection applications.
+    This project has implemented a general block extraction algorithm, supporting the automatic block extraction of the models in image classification, object detection, semantic segmentation, attitude estimation, behavior recognition, and anomaly detection applications.
 
 ### 1.2 Architecture
 
@@ -236,19 +236,19 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 ### 3.1 Supported models 
 
 
-**Image classfication**
+**Image classification**
   
   ||Model Name|Data|Script|
   |--|--|--|--|
   |&#9745;|[ResNet (CVPR'2016)](https://openaccess.thecvf.com/content_cvpr_2016/html/He_Deep_Residual_Learning_CVPR_2016_paper.html)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/legodnn_resnet_test.py)|
-  |&#9745;|[MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)||
-  |&#9745;|[ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[MobileNetV2 (CVPR'2018)](https://arxiv.org/abs/1801.04381)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/mobilenetv2.py)|
+  |&#9745;|[ResNeXt (CVPR'2017)](https://arxiv.org/abs/1611.05431)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/resnext.py)|
   |&#9745;|[InceptionV3(CVPR'2016)](https://ieeexplore.ieee.org/document/7780677/)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/legodnn_inceptionv3_test.py)|
-  |&#9745;|[WideResNet (BMVC'2016)](https://dx.doi.org/10.5244/C.30.87)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
-  |&#9745;|[RAN (CVPR'2017)](https://doi.org/10.1109/CVPR.2017.683)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[WideResNet (BMVC'2016)](https://dx.doi.org/10.5244/C.30.87)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/wideresnet.py)|
+  |&#9745;|[RAN (CVPR'2017)](https://doi.org/10.1109/CVPR.2017.683)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/ran.py)|
   |&#9745;|[CBAM (ECCV'2018)](https://doi.org/10.1007/978-3-030-01234-2_1)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/legodnn_cbam_r18_test.py)|
-  |&#9745;|[SENet (CVPR'2018)](https://ieeexplore.ieee.org/document/341010)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
-  |&#9745;|[VGG (ICLR'2015)](http://arxiv.org/abs/1409.1556)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|
+  |&#9745;|[SENet (CVPR'2018)](https://ieeexplore.ieee.org/document/341010)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/senet.py)|
+  |&#9745;|[VGG (ICLR'2015)](http://arxiv.org/abs/1409.1556)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/vgg.py)|
 
  **Obejct detection**
  ||Model Name|Data|Script|
