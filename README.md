@@ -250,7 +250,7 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
   |&#9745;|[SENet (CVPR'2018)](https://ieeexplore.ieee.org/document/341010)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/senet.py)|
   |&#9745;|[VGG (ICLR'2015)](http://arxiv.org/abs/1409.1556)|[Cifar100](http://www.cs.toronto.edu/~kriz/cifar.html)|[Demo](example/image_classification/vgg.py)|
 
- **Obejct detection**
+ **Object detection**
  ||Model Name|Data|Script|
   |--|--|--|--|
   |&#9745;|[Fast R-CNN (NIPS'2015)](https://ieeexplore.ieee.org/abstract/document/7485869)|[PARSCAL VOC 2007](http://host.robots.ox.ac.uk/pascal/VOC)|[Demo](example/object_detection/legodnn_faster_rcnn_test.py)|
