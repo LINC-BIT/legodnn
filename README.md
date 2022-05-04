@@ -25,8 +25,7 @@
   * [2.2 Installation](#22-installation)
 - [3 Repository of DNNs in vision tasks](#3-repository-of-dnns-in-vision-tasks)
   * [3.1 Supported models](#31-supported-models)
-  * [3.2 Full examples](#32-full-examples)
-  * [3.3 How to implement new models in LegoDNN](#33-how-to-implement-new-models-in-legodnn)
+  * [3.2 How to implement new models in LegoDNN](#32-how-to-implement-new-models-in-legodnn)
 - [4 Demo Video and experiment data](#4-demo-video-and-experiment-data)
 - [5 Project member and contact information](#5-Project-member-and-contact-information)
   * [5.1 Project member](#51-Project-member)
@@ -292,7 +291,7 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
 
 
 
-### 3.3 How to implement new models in LegoDNN
+### 3.2 How to implement new models in LegoDNN
 
 The model have particular training need to implement a custom model manager based on  AbstractModelManager in package `legodnn.common.manager.model_manager.abstract_model_manager`.
 
