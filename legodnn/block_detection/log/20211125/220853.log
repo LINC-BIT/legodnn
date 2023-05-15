@@ -1,0 +1,458 @@
+2021-11-25 22:08:53,434 - log.py[38] - DEBUG: entry file content: ---------------------------------
+2021-11-25 22:08:53,434 - log.py[39] - DEBUG: 
+import copy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn import ModuleDict, ModuleList
+from torch.nn.modules import module
+from legodnn.utils.dl.common.model import get_module
+
+MULTI_OUTPUT_TYPE = ['prim::TupleUnpack']
+
+
+class LegoDNNBlock(nn.Module):
+    # 原始模型 块内组件的名字列表 模型计算图 设备
+    def __init__(self, original_model, num_in_block, legodnn_graph, block_info, is_empty=False):
+        super(LegoDNNBlock, self).__init__()
+        self._num_in_block = num_in_block
+        self._graph = legodnn_graph
+        self._block_info = block_info  # 包含输入节点序号顺序 
+        self._layer_io = {}
+        self._io_activation_order_list = []
+        
+        # 新开的辅助数据结构 记录是否已经定义了这个模块
+        defined_module_name = []    # name
+
+        # 深复制一份模型 在这之中抽取块
+        model = copy.deepcopy(original_model)
+
+        # 将需要在块中的组件加到list中
+        for num in self._num_in_block:
+            name = self._graph.order_to_node.get(num).get_name()
+            # print('--> add {}'.format(name))
+            # 只获取module类型的节点
+            if self._graph.node_dict.get(name).get_type() != 'module':
+                # print('pass {}'.format(name))
+                continue
+            # 返回nn.Module或者None
+            module = get_module(model, name)
+
+            if not module:
+                # continue
+                # 可能是重用了组件 则把后缀的数字去掉 找原始组件
+                # print('WARNING: reusing module: {}'.format(name))
+                name = '.'.join(name.split('.')[0:-1])
+                module = get_module(model, name)
+                if module == None:
+                    # 报错 没有在模型中找到这样的块
+                    print('\033[1;31m', 'ERROR: can not find nn.Module named {}'.format(name), '\033[0m')
+
+            if is_empty:
+                module = nn.Sequential()
+                    
+            # 按照层级关系创建成员变量
+            module_name_segment = name.split('.')
+            # 若不存在层级关系 直接加入成员变量
+            if len(module_name_segment) == 1:
+                exec('self.{} = module'.format(name))
+            # 若存在层级关系时
+            else:
+                cur_dict = None
+                cur_module_name = ''
+                # 由浅入深 判断是否已经存在 若不存在则创建容器
+                for i, name_segment in enumerate(module_name_segment[:-1]):
+                    cur_module_name = '.'.join([cur_module_name, name_segment]) if cur_module_name != '' else name_segment
+                    # print('cur_module_name: {}'.format(cur_module_name))
+                    # 若存在 则找到字典
+                    if cur_module_name in defined_module_name:
+                        if i == 0:
+                            cur_dict = eval('self.{}'.format(name_segment))
+                        else:
+                            cur_dict = cur_dict[name_segment]
+                    # 若不存在 且为最浅层 则创建 并标记为已创建
+                    elif i == 0:
+                        exec('self.{} = ModuleDict()'.format(name_segment))
+                        defined_module_name.append(name_segment)
+                        cur_dict = eval('self.{}'.format(name_segment))
+
+                    # 若不存在 且为中间层 则创建并加入字典 标记为已创建
+                    else:
+                        cur_dict.update({name_segment: ModuleDict()})
+                        cur_dict = cur_dict[name_segment]
+                        defined_module_name.append(cur_module_name)
+                # 将最后一层加入字典
+                cur_dict.update({module_name_segment[-1]: module})
+                cur_module_name = ''
+                cur_dict = None
+        
+        
+        # 遍历图 提前得到forward的对应关系及顺序 以减少实际训练阶段的向前推理时间（每次没必要再遍历图）
+        self.forward_order = []  # 按顺序存放forward关系 如(num, [(node1,1), (node2,0), ...]) 表示num节点的输入是node1的第1个输出和node2的第0个输出
+        for i, num in enumerate(self._num_in_block):
+            node = self._graph.order_to_node.get(num)
+            pre_nodes = list(node.pre_nodes.values())
+            pre_nodes_num = []
+            if i != 0:
+                for pre_node in pre_nodes:
+                    pre_node_index = list(pre_node.next_nodes.values()).index(node) if pre_node.get_op_type() in MULTI_OUTPUT_TYPE else 0
+                    pre_nodes_num.append((pre_node.serial_number, pre_node_index))
+            self.forward_order.append((num, pre_nodes_num))
+
+        print(self.forward_order)
+
+    def get_module_by_name(self, name):
+        module_name_segment = name.split('.')
+        if len(module_name_segment) == 1:
+            return eval('self.{}'.format(name))
+        else:
+            dict = eval('self.{}'.format(module_name_segment[0]))
+            if not isinstance(dict, ModuleDict):
+                return dict
+            for name_segment in module_name_segment[1:]:
+                module = dict[name_segment]
+                if not isinstance(module, ModuleDict):
+                    return module
+                dict = module
+
+    def _handle_add(self, tensor_list):
+        # print('add tensor_list len: {}'.format(len(tensor_list)))
+        z = tensor_list[0]
+        for x in tensor_list[1:]:
+            z = z + x
+        return z
+
+    def _handle_add_(self, tensor_list):
+        # print('add tensor_list len: {}'.format(len(tensor_list)))
+        z = tensor_list[0]
+        for x in tensor_list[1:]:
+            z.add_(x)
+        return z
+
+    def _handle_mul(self, tensor_list):
+        # print('mul tensor_list len: {}'.format(len(tensor_list)))
+        z = tensor_list[0]
+        for x in tensor_list[1:]:
+            z = z * x
+        return z
+
+    def _handle_unsqueeze(self, tensor_list, node):
+        x = tensor_list[0]
+        auxiliary = node._auxiliary
+        in_shape = auxiliary.get('in_shape')
+        out_shape = auxiliary.get('out_shape')  # 一定比in_shape长度多1
+        unsqueeze_dim = len(in_shape)
+        for i, num in enumerate(in_shape):
+            if out_shape[i] != num:
+                unsqueeze_dim = i
+                break
+        return x.unsqueeze(unsqueeze_dim) 
+
+    def _handle_expand_as(self, tensor_list, node):
+        auxiliary = node._auxiliary
+        in_shape = auxiliary.get('in_shape')
+        out_shape = auxiliary.get('out_shape')
+        real_batch_size = list(tensor_list[0].size())[0]
+        in_shape[0] =  real_batch_size
+        out_shape[0] = real_batch_size
+        # print('expand in shape: {}, out shape: {}'.format(in_shape, out_shape))
+        for tensor in tensor_list:
+            if list(tensor.size()) == in_shape:
+                x = tensor
+            if list(tensor.size()) == out_shape:
+                template = tensor
+            # print(tensor.size())
+        return x.expand_as(template)
+
+    def _handle_flatten(self, tensor_list, node):
+        # node中存有flatten需要的辅助信息
+        x = tensor_list[0]
+        auxiliary = node._auxiliary
+        in_shape = auxiliary.get('in_shape')
+        out_shape = auxiliary.get('out_shape')
+        for i, num in enumerate(in_shape):
+            if i == len(out_shape):
+                start_dim = i - 1
+                multi_result = out_shape[i-1]
+                break
+            if out_shape[i] != num:
+                start_dim = i
+                multi_result = out_shape[i]
+                break
+        multi = 1
+        end_dim = start_dim
+        for i in range(start_dim, len(in_shape)):
+            # multi = multi*in_shape[i]
+            multi *= in_shape[i]
+            if multi == multi_result and len(in_shape)-(end_dim-start_dim) == len(out_shape):
+                break
+            # end_dim = end_dim + 1
+            end_dim += 1
+        # print('start dim: {}, end dim: {}'.format(start_dim, end_dim))
+        return torch.flatten(x, start_dim=start_dim, end_dim=end_dim)
+
+    def _handle_view(self, tensor_list, node):
+        x = tensor_list[0]
+        auxiliary = node._auxiliary
+        out_shape = auxiliary.get('out_shape')
+        real_batch_size = list(x.size())[0]
+        out_shape[0] = real_batch_size
+        return x.view(out_shape)
+
+    def _handle_cat(self, tensor_list, input_list, node):
+        # input_list是tensor_list中的顺序
+        auxiliary = node._auxiliary
+        cat_dim = auxiliary.get('cat_dim')
+        in_order = auxiliary.get('in_order')  # cat的顺序
+        # 建立名字与输入tensor的对应关系
+        name_to_tensor = {}
+        for i, input_info in enumerate(input_list):
+            input_num = input_info[0]
+            name_to_tensor.update({self._graph.order_to_node.get(input_num).get_name(): tensor_list[i]})   
+        # 若in_order中有input_list中没有的名字 则重新对应
+        assert len(in_order) == len(input_list)
+        module_name_list = []
+        for module_name in in_order:
+            if not module_name.startswith('.prim::TupleUnpack'):
+                module_name_list.append(module_name)
+        new_input_list = []
+        for i, input_info in enumerate(input_list):
+            input_num = input_info[0]
+            if self._graph.order_to_node.get(input_num).get_name() not in module_name_list:
+                new_input_list.append(input_info)
+        new_in_order = []
+        ii = 0
+        for module_name in in_order:
+            if module_name in module_name_list:
+                new_in_order.append(module_name)
+            else:
+                new_in_order.append(self._graph.order_to_node.get(new_input_list[ii][0]).get_name())
+                ii = ii + 1
+        
+        # 根据in_order的顺序将tensor_list放入cat_list中
+        cat_list = []
+        for module_name in new_in_order:
+            cat_list.append(name_to_tensor.get(module_name))
+        return torch.cat(cat_list, dim=cat_dim)
+
+    def _handle_upsample_nearest2d(self, tensor_list, input_list):
+        # 建立输入tensor与操作类型的对应关系
+        tensor_to_op_type = {}
+        for i, input_info in enumerate(input_list):
+            input_num = input_info[0]
+            tensor_to_op_type.update({tensor_list[i] : self._graph.order_to_node.get(input_num).get_op_type()})
+        for tensor in tensor_list:
+            if tensor_to_op_type.get(tensor) in ['aten::size', 'aten::Int']:
+                output_size = list(tensor.size())[2:]
+            else:
+                input_tensor = tensor
+        return F.interpolate(input_tensor, size=output_size, mode='nearest')
+    
+    def _handle_upsample_bilinear2d(self, tensor_list, input_list):
+        # 建立输入tensor与操作类型的对应关系
+        tensor_to_op_type = {}
+        for i, input_info in enumerate(input_list):
+            input_num = input_info[0]
+            tensor_to_op_type.update({tensor_list[i] : self._graph.order_to_node.get(input_num).get_op_type()})
+        for tensor in tensor_list:
+            if tensor_to_op_type.get(tensor) in ['aten::size', 'aten::Int']:
+                output_size = list(tensor.size())[2:]
+            else:
+                input_tensor = tensor
+        return F.interpolate(input_tensor, size=output_size, mode='bilinear')
+    
+    def _handle_to(self, tensor_list):
+        return tensor_list[0].float()
+    
+    def _handle_exp(self, tensor_list):
+        return tensor_list[0].exp()
+    
+    def _handle_tuple_unpack(input_tensor_list):
+        pass    
+         
+
+    def forward(self, x):
+        # x是元组 需要根据self._block_info中的输入节点信息 将元组中的tensor传入相应节点
+        start_node_is_placeholder = list(self._block_info[0])
+        start_node_order = list(self._block_info[1])
+        end_node_order = list(self._block_info[2])
+
+        num_to_output = {}  # 按序号索引每个节点的输出 每个节点的输出是个List
+        # 根据顺序定义向前传播
+        for i, forward_record in enumerate(self.forward_order):
+            num = forward_record[0]
+            input_list = forward_record[1]
+            print(num)
+
+            # OLD if i == 0 and self._has_placeholder:
+            #         output_tensor = x
+            #         num_to_output.update({num: output_tensor})
+            #         continue
+            
+            # 是开始节点且为占位符
+            if num in start_node_order and start_node_is_placeholder[start_node_order.index(num)]:
+                # [x[start_node_order.index(num)]]
+                output_tensor = [x[start_node_order.index(num)]] if isinstance(x, tuple) else [x]
+                num_to_output.update({num: output_tensor})
+                continue
+
+            node = self._graph.order_to_node.get(num)  # LegoDNNNode
+            name = node.get_name()
+            type = node.get_type()
+            module = self.get_module_by_name(name) if type == 'module' else None  # nn.Module
+            op_type = node.get_op_type()
+
+            
+            # 预处理input_list 把不需要的size和Int删掉
+            need_size_op_types = ['aten::upsample_nearest2d', 'aten::upsample_bilinear2d']
+            if len(input_list) > 1 and op_type not in need_size_op_types:
+                new_input_list = []
+                for input_info in input_list:
+                    input_node_num = input_info[0]
+                    if self._graph.order_to_node.get(input_node_num).get_op_type() not in ['aten::size', 'aten::Int']:
+                        new_input_list.append(input_info)
+                input_list = new_input_list
+
+            # 如果当前组件是module类型 可直接传入tensor
+            if type == 'module':
+            
+                if len(input_list) <= 1:
+                    # OLD input_tensor = num_to_output.get(input_list[0]) if i != 0 else x
+                    if num in start_node_order:  # 开始节点 将x中对应的tensor作为输入
+                        input_tensor = x[start_node_order.index(num)] if isinstance(x, tuple) else x
+                    else:  # 普通节点 根据input_list中的信息去找
+                        input_info = input_list[0]
+                        input_node_num = input_info[0]
+                        input_node_index = input_info[1]
+                        input_tensor = num_to_output.get(input_node_num)[input_node_index]
+                    if input_tensor != None:
+                        num_to_output.update({num: [module(input_tensor)]})
+                    else:
+                        print('\033[1;31m', 'ERROR: can not get the input tensor of module {}'.format(name), '\033[0m')
+                else:
+                    # 有多个输入的module
+                    print('\033[1;31m', 'ERROR: module {} has multi inputs'.format(name), '\033[0m')
+            # 如果当前组件是func类型 需要使用自定义函数处理
+            elif type == 'func':
+                # 将输入tensor取出
+                input_tensor_list = []
+                # OLD if i == 0:
+                #         input_tensor_list.append(x)
+                if num in start_node_order:  # 开始节点 将x中对应的tensor加入输入列表
+                    input_tensor_list.append(x[start_node_order.index(num)] if isinstance(x, tuple) else x)
+                else:  # 普通节点 根据input_list中的信息去找
+                    # OLD for input_num in input_list:
+                    #        input_tensor = num_to_output.get(input_num)
+                    #        if input_tensor != None:
+                    #            input_tensor_list.append(input_tensor)
+                    #        else:
+                    #            print('ERROR: can not get the input tensor {} of module {}'.format(num, name))
+                    for input_info in input_list:
+                        input_node_num = input_info[0]
+                        input_node_index = input_info[1]
+                        input_tensor = num_to_output.get(input_node_num)[input_node_index]
+                        if input_tensor != None:
+                            input_tensor_list.append(input_tensor)
+                        else:
+                            print('\033[1;31m', 'ERROR: can not get the input tensor {} of module {}'.format(num, name), '\033[0m')
+                # 送入对应的函数进行处理
+                if op_type in ['aten::add', 'aten::add_']:
+                    output_tensor = self._handle_add(input_tensor_list)
+                elif op_type == 'aten::mul':
+                    output_tensor = self._handle_mul(input_tensor_list)
+                elif op_type == 'aten::unsqueeze':
+                    output_tensor = self._handle_unsqueeze(input_tensor_list, node)
+                elif op_type == 'aten::expand_as':
+                    output_tensor = self._handle_expand_as(input_tensor_list, node)
+                elif op_type == 'aten::flatten':
+                    output_tensor = self._handle_flatten(input_tensor_list, node)
+                elif op_type == 'aten::view':
+                    output_tensor = self._handle_view(input_tensor_list, node)
+                elif op_type == 'aten::cat':
+                    output_tensor = self._handle_cat(input_tensor_list, input_list, node)
+                elif op_type == 'aten::upsample_nearest2d':
+                    output_tensor = self._handle_upsample_nearest2d(input_tensor_list, input_list)
+                elif op_type == 'aten::upsample_bilinear2d':
+                    output_tensor = self._handle_upsample_bilinear2d(input_tensor_list, input_list)
+                elif op_type == 'aten::to':
+                    output_tensor = self._handle_to(input_tensor_list)
+                elif op_type in ['aten::size', 'aten::Int']:
+                    output_tensor = input_tensor_list[0]  # 这些操作的结果是一个常数 对forward无影响 当作不存在该节点
+                elif op_type == 'prim::TupleUnpack':
+                    # output_tensor = self._handle_tuple_unpack(input_tensor_list)
+                    output_tensor = input_tensor_list
+                else:
+                    print('\033[1;31m', 'ERROR: can not handle the func named {}'.format(name), '\033[0m')
+                # 更新输出对应的字典
+                num_to_output.update({num: output_tensor if op_type in MULTI_OUTPUT_TYPE else [output_tensor]})
+                
+            # 检查io_activation 保留需要的值
+            if num in self._io_activation_order_list:
+                # 输入节点去掉没用的size和Int
+                input_list = forward_record[1]
+                if len(input_list) > 1:
+                    new_input_list = []
+                    for input_info in input_list:
+                        input_node_num = input_info[0]
+                        if self._graph.order_to_node.get(input_node_num).get_op_type() not in ['aten::size', 'aten::Int']:
+                            new_input_list.append(input_info)
+                    input_list = new_input_list
+                # 找出所有输入tensor
+                input_tensor_list = []
+                for input_info in input_list:
+                    input_node_num = input_info[0]
+                    input_node_index = input_info[1]
+                    input_tensor = num_to_output.get(input_node_num)[input_node_index]
+                    if input_tensor != None:
+                        input_tensor_list.append(input_tensor)
+                # 找出所有输出tensor
+                output_tensor_list = num_to_output.get(num)
+                self._layer_io.update({num: [input_tensor_list, output_tensor_list]})
+            
+        # 最终返回多个值 即end_node_order中节点的输出 组成一个元组
+        # OLD return num_to_output.get(self._num_in_block[-1])
+        return_tuple = ()
+        for num in end_node_order:
+            for tensor in num_to_output.get(num):
+                return_tuple = return_tuple + (tensor,)
+                
+        # return return_tuple if len(end_node_order) > 1 else num_to_output.get(self._num_in_block[-1])
+        # NOTE 2021/11/18 22:45 num_to_output中的每个value是一个列表，取[0]
+        return return_tuple if len(end_node_order) > 1 else num_to_output.get(self._num_in_block[-1])[0]
+    
+    def set_io_activation(self, node_order_list):
+        self._io_activation_order_list = node_order_list
+
+    def remove_io_activation(self, node_order_list):
+        for order in self._io_activation_order_list:
+            if order in node_order_list:
+                self._io_activation_order_list.remove(order)
+    
+    def get_layer_input(self, order):
+        return self._layer_io.get(order)[0]
+
+    def get_layer_output(self, order):
+        return self._layer_io.get(order)[1]
+    
+if __name__=='__main__':
+    from cv_task.semantic_segmentation.mmseg_models.legodnn_configs.__init__ import get_deeplabv3_r18_d8_512x1024_80k_cityscapes_config
+    from legodnn.block_detection.model_topology_extraction import topology_extraction
+    from cv_task.semantic_segmentation.mmseg_models.deeplabv3 import deeplabv3_r18_d8
+    device = 'cuda'
+    model_input_size = (1, 3, 320, 320)
+    model_config = get_deeplabv3_r18_d8_512x1024_80k_cityscapes_config(input_size=model_input_size)
+    jit_detector = deeplabv3_r18_d8(config=model_config, mode='lego_jit', device=device)
+    graph = topology_extraction(jit_detector, model_input_size, device=device, mode='unpack')
+    graph.print_ordered_node()
+    model = deeplabv3_r18_d8(config=model_config, mode='mmseg_test', device=device)
+    num_in_block = range(1, graph.len()+1)
+    legodnn_block = LegoDNNBlock(model, num_in_block, graph, ([0],[1],[105])).to(device)
+    
+    data = torch.ones(model_input_size).to(device)
+    model.eval()
+    legodnn_block.eval()
+    # output1 = model(data)
+    output2 = legodnn_block(data)
+    
+    
+2021-11-25 22:08:53,434 - log.py[40] - DEBUG: entry file content: ---------------------------------

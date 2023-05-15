@@ -1,0 +1,1413 @@
+2023-05-15 21:54:11,365 - log.py[38] - DEBUG: entry file content: ---------------------------------
+2023-05-15 21:54:11,365 - log.py[39] - DEBUG: 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+import copy
+import torch
+import math
+from cv_task.semantic_segmentation.mmseg_tools.test import test_segmentor
+import sys
+sys.path.insert(0, '../../')
+sys.setrecursionlimit(100000)
+from legodnn import BlockExtractor, BlockTrainer, ServerBlockProfiler, EdgeBlockProfiler, OptimalRuntime
+from legodnn.gen_series_legodnn_models import gen_series_legodnn_models
+from legodnn.utils.dl.common.env import set_random_seed
+set_random_seed(0)
+from legodnn.block_detection.model_topology_extraction import topology_extraction
+from legodnn.presets.auto_block_manager import AutoBlockManager
+from legodnn.presets.common_detection_manager_1204_new import CommonDetectionManager
+from legodnn.model_manager.common_semantic_segmentation_model_manager_v2 import CommonSemanticSegmentationModelManager
+from legodnn.utils.dl.common.model import get_module, set_module, get_model_size
+from legodnn.utils.common.file import experiments_model_file_path
+
+from cv_task.datasets.semantic_segmentation import mmseg_build_dataloader
+from cv_task.semantic_segmentation.mmseg_models.legodnn_configs import get_fcn_r18_d8_512x512_b16_30k_voc2012_config
+from cv_task.semantic_segmentation.mmseg_tools import mmseg_init_model
+from mmcv.parallel import MMDataParallel
+
+if __name__=='__main__':
+    cv_task = 'semantic_segmentation'
+    dataset_name = 'voc2012'
+    model_name = 'fcn_r18_d8_512_512_b16'
+    method = 'legodnn'
+    sparsity = 's0'
+    compress_layer_max_ratio = 0.125
+    # compress_layer_max_ratio = 0.25
+    # train_iter_num = 6000
+    train_iter_num = 1000
+    device = 'cuda' 
+    model_input_size = (1, 3, 512, 512)
+    block_sparsity = [0.0, 0.4, 0.8]
+    teacher_pt_file = None
+    checkpoint = None
+    
+    root_path = os.path.join('results/legodnn', cv_task, model_name+'_'+dataset_name + '_' + str(compress_layer_max_ratio).replace('.', '-'))
+    
+    compressed_blocks_dir_path = root_path + '/compressed'
+    trained_blocks_dir_path = root_path + '/trained'
+    descendant_models_dir_path = root_path + '/descendant'
+    test_sample_num = 65
+    model_config = get_fcn_r18_d8_512x512_b16_30k_voc2012_config()
+    
+    print('\033[1;36m-------------------------------->    BUILD LEGODNN GRAPH\033[0m')
+    jit_detector = mmseg_init_model(model_config, None, mode='lego_jit', device=device)
+    model_graph = topology_extraction(jit_detector, model_input_size, device=device, mode='unpack')
+    model_graph.print_ordered_node()
+    
+    print('\033[1;36m-------------------------------->    START BLOCK DETECTION\033[0m')
+    detection_manager = CommonDetectionManager(model_graph, max_ratio=compress_layer_max_ratio)
+    detection_manager.detection_all_blocks()
+    detection_manager.print_all_blocks()
+    # exit(0)
+    model_manager = CommonSemanticSegmentationModelManager()
+    block_manager = AutoBlockManager(block_sparsity, detection_manager, model_manager)    
+    # TODO
+    if teacher_pt_file is not None:
+        teacher_detector = mmseg_init_model(config=model_config, checkpoint=None, mode='mmseg_test', device=device)
+        raw_teacher: torch.nn.Module = torch.load(teacher_pt_file).to(device)
+        for name,param in raw_teacher.named_parameters():
+            param.requires_grad = True
+            
+        for name, module in raw_teacher.named_modules():
+            if len(list(module.children()))>0:
+                continue
+            else:
+                set_module(teacher_detector, name, copy.deepcopy(module))
+    else:
+        teacher_detector = mmseg_init_model(config=model_config, checkpoint=checkpoint, mode='mmseg_test', device=device)
+        
+    print('\033[1;36m-------------------------------->    START BLOCK EXTRACTION\033[0m')
+    block_extractor = BlockExtractor(teacher_detector, block_manager, compressed_blocks_dir_path, model_input_size, device)
+    block_extractor.extract_all_blocks()
+    # exit(0)
+    print('\033[1;36m-------------------------------->    START BLOCK TRAIN\033[0m')
+    train_loader, test_loader = mmseg_build_dataloader(cfg=model_config)
+    epoch_num = math.ceil(float(train_iter_num)/len(train_loader))
+    parallel_teacher_detector = MMDataParallel(teacher_detector.cuda(0), device_ids=[0])
+    block_trainer = BlockTrainer(parallel_teacher_detector, block_manager, model_manager, compressed_blocks_dir_path,
+                                 trained_blocks_dir_path, epoch_num, train_loader, device=device)
+    block_trainer.train_all_blocks()
+    
+    server_block_profiler = ServerBlockProfiler(teacher_detector, block_manager, model_manager,
+                                                trained_blocks_dir_path, test_loader, model_input_size, device)
+    server_block_profiler.profile_all_blocks()
+
+    edge_block_profiler = EdgeBlockProfiler(block_manager, model_manager, trained_blocks_dir_path, 
+                                            test_sample_num, model_input_size, device)
+    edge_block_profiler.profile_all_blocks()
+
+    optimal_runtime = OptimalRuntime(trained_blocks_dir_path, model_input_size,
+                                     block_manager, model_manager, device)
+    
+    model_size_min = get_model_size(torch.load(os.path.join(compressed_blocks_dir_path, 'model_frame.pt')))/1024**2
+    model_size_max = get_model_size(teacher_detector)/1024**2 + 1
+    gen_series_legodnn_models(deadline=100, model_size_search_range=[model_size_min, model_size_max], target_model_num=100, optimal_runtime=optimal_runtime, descendant_models_save_path=descendant_models_dir_path, device=device)
+2023-05-15 21:54:11,365 - log.py[40] - DEBUG: entry file content: ---------------------------------
+2023-05-15 21:54:25,272 - block_extractor.py[28] - INFO: save pruned block block-0 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-0-0.pt
+2023-05-15 21:54:25,272 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (stem): ModuleDict(
+      (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (1): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (2): ReLU()
+      (3): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (4): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (5): ReLU()
+      (6): Conv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    )
+  )
+)
+2023-05-15 21:54:26,182 - block_extractor.py[28] - INFO: save pruned block block-0 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-0-4.pt
+2023-05-15 21:54:26,183 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (stem): ModuleDict(
+      (0): Conv2d(3, 20, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (1): BatchNorm2d(20, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (2): ReLU()
+      (3): Conv2d(20, 20, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (4): BatchNorm2d(20, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (5): ReLU()
+      (6): Conv2d(20, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    )
+  )
+)
+2023-05-15 21:54:27,116 - block_extractor.py[28] - INFO: save pruned block block-0 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-0-8.pt
+2023-05-15 21:54:27,117 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (stem): ModuleDict(
+      (0): Conv2d(3, 7, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (1): BatchNorm2d(7, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (2): ReLU()
+      (3): Conv2d(7, 7, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (4): BatchNorm2d(7, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (5): ReLU()
+      (6): Conv2d(7, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    )
+  )
+)
+2023-05-15 21:54:27,158 - block_extractor.py[28] - INFO: save pruned block block-1 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-1-0.pt
+2023-05-15 21:54:27,158 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (stem): ModuleDict(
+      (7): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (8): ReLU()
+    )
+    (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+    (layer1): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:28,559 - block_extractor.py[28] - INFO: save pruned block block-1 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-1-4.pt
+2023-05-15 21:54:28,559 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (stem): ModuleDict(
+      (7): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (8): ReLU()
+    )
+    (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+    (layer1): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(64, 39, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(39, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(39, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:30,044 - block_extractor.py[28] - INFO: save pruned block block-1 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-1-8.pt
+2023-05-15 21:54:30,044 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (stem): ModuleDict(
+      (7): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (8): ReLU()
+    )
+    (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+    (layer1): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(64, 13, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(13, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(13, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:30,080 - block_extractor.py[28] - INFO: save pruned block block-2 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-2-0.pt
+2023-05-15 21:54:30,080 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer1): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:30,736 - block_extractor.py[28] - INFO: save pruned block block-2 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-2-4.pt
+2023-05-15 21:54:30,737 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer1): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(64, 39, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(39, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(39, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:31,381 - block_extractor.py[28] - INFO: save pruned block block-2 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-2-8.pt
+2023-05-15 21:54:31,381 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer1): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(64, 13, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(13, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(13, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:31,424 - block_extractor.py[28] - INFO: save pruned block block-3 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-3-0.pt
+2023-05-15 21:54:31,425 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer1): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer2): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(64, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(64, 128, kernel_size=(1, 1), stride=(2, 2), bias=False)
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:32,228 - block_extractor.py[28] - INFO: save pruned block block-3 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-3-4.pt
+2023-05-15 21:54:32,229 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer1): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer2): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(64, 77, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(77, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(77, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(64, 128, kernel_size=(1, 1), stride=(2, 2), bias=False)
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:32,957 - block_extractor.py[28] - INFO: save pruned block block-3 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-3-8.pt
+2023-05-15 21:54:32,957 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer1): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer2): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(64, 26, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(26, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(26, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(64, 128, kernel_size=(1, 1), stride=(2, 2), bias=False)
+          (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:32,996 - block_extractor.py[28] - INFO: save pruned block block-4 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-4-0.pt
+2023-05-15 21:54:32,996 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer2): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:33,496 - block_extractor.py[28] - INFO: save pruned block block-4 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-4-4.pt
+2023-05-15 21:54:33,496 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer2): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(128, 77, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(77, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(77, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:34,161 - block_extractor.py[28] - INFO: save pruned block block-4 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-4-8.pt
+2023-05-15 21:54:34,161 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer2): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(128, 26, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(26, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(26, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:34,220 - block_extractor.py[28] - INFO: save pruned block block-5 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-5-0.pt
+2023-05-15 21:54:34,220 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer2): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer3): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(128, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:35,019 - block_extractor.py[28] - INFO: save pruned block block-5 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-5-4.pt
+2023-05-15 21:54:35,019 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer2): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer3): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(128, 154, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(154, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(154, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(128, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:35,789 - block_extractor.py[28] - INFO: save pruned block block-5 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-5-8.pt
+2023-05-15 21:54:35,789 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer2): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer3): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(128, 52, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn1): BatchNorm2d(52, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(52, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(128, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:35,830 - block_extractor.py[28] - INFO: save pruned block block-6 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-6-0.pt
+2023-05-15 21:54:35,831 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer3): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), bias=False)
+        (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:36,675 - block_extractor.py[28] - INFO: save pruned block block-6 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-6-4.pt
+2023-05-15 21:54:36,675 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer3): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(256, 154, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), bias=False)
+        (bn1): BatchNorm2d(154, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(154, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:37,558 - block_extractor.py[28] - INFO: save pruned block block-6 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-6-8.pt
+2023-05-15 21:54:37,558 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer3): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(256, 52, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), bias=False)
+        (bn1): BatchNorm2d(52, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(52, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:37,615 - block_extractor.py[28] - INFO: save pruned block block-7 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-7-0.pt
+2023-05-15 21:54:37,615 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer3): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer4): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), bias=False)
+        (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:39,114 - block_extractor.py[28] - INFO: save pruned block block-7 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-7-4.pt
+2023-05-15 21:54:39,115 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer3): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer4): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(256, 308, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), bias=False)
+        (bn1): BatchNorm2d(308, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(308, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:40,686 - block_extractor.py[28] - INFO: save pruned block block-7 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-7-8.pt
+2023-05-15 21:54:40,686 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer3): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+    (layer4): ModuleDict(
+      (0): ModuleDict(
+        (conv1): Conv2d(256, 103, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), bias=False)
+        (bn1): BatchNorm2d(103, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(103, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (downsample): ModuleDict(
+          (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        )
+      )
+    )
+  )
+)
+2023-05-15 21:54:40,761 - block_extractor.py[28] - INFO: save pruned block block-8 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-8-0.pt
+2023-05-15 21:54:40,761 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer4): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(4, 4), dilation=(4, 4), bias=False)
+        (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:42,537 - block_extractor.py[28] - INFO: save pruned block block-8 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-8-4.pt
+2023-05-15 21:54:42,537 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer4): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(512, 308, kernel_size=(3, 3), stride=(1, 1), padding=(4, 4), dilation=(4, 4), bias=False)
+        (bn1): BatchNorm2d(308, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(308, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:44,283 - block_extractor.py[28] - INFO: save pruned block block-8 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-8-8.pt
+2023-05-15 21:54:44,283 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer4): ModuleDict(
+      (0): ModuleDict(
+        (relu): ReLU()
+      )
+      (1): ModuleDict(
+        (conv1): Conv2d(512, 103, kernel_size=(3, 3), stride=(1, 1), padding=(4, 4), dilation=(4, 4), bias=False)
+        (bn1): BatchNorm2d(103, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU()
+        (conv2): Conv2d(103, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      )
+    )
+  )
+)
+2023-05-15 21:54:44,330 - block_extractor.py[28] - INFO: save pruned block block-9 (sparsity 0.0) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-9-0.pt
+2023-05-15 21:54:44,330 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer4): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+  )
+  (decode_head): ModuleDict(
+    (convs): ModuleDict(
+      (0): ModuleDict(
+        (conv): Conv2d(512, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (activate): ReLU()
+      )
+      (1): ModuleDict(
+        (conv): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (activate): ReLU()
+      )
+    )
+    (conv_cat): ModuleDict(
+      (conv): Conv2d(640, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    )
+  )
+)
+2023-05-15 21:54:45,709 - block_extractor.py[28] - INFO: save pruned block block-9 (sparsity 0.4) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-9-4.pt
+2023-05-15 21:54:45,709 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer4): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+  )
+  (decode_head): ModuleDict(
+    (convs): ModuleDict(
+      (0): ModuleDict(
+        (conv): Conv2d(512, 77, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn): BatchNorm2d(77, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (activate): ReLU()
+      )
+      (1): ModuleDict(
+        (conv): Conv2d(77, 77, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn): BatchNorm2d(77, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (activate): ReLU()
+      )
+    )
+    (conv_cat): ModuleDict(
+      (conv): Conv2d(589, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    )
+  )
+)
+2023-05-15 21:54:47,057 - block_extractor.py[28] - INFO: save pruned block block-9 (sparsity 0.8) in results/legodnn/semantic_segmentation/fcn_r18_d8_512_512_b16_voc2012_0-125/compressed/block-9-8.pt
+2023-05-15 21:54:47,057 - block_extractor.py[29] - DEBUG: LegoDNNBlock(
+  (backbone): ModuleDict(
+    (layer4): ModuleDict(
+      (1): ModuleDict(
+        (relu): ReLU()
+      )
+    )
+  )
+  (decode_head): ModuleDict(
+    (convs): ModuleDict(
+      (0): ModuleDict(
+        (conv): Conv2d(512, 26, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn): BatchNorm2d(26, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (activate): ReLU()
+      )
+      (1): ModuleDict(
+        (conv): Conv2d(26, 26, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+        (bn): BatchNorm2d(26, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (activate): ReLU()
+      )
+    )
+    (conv_cat): ModuleDict(
+      (conv): Conv2d(538, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    )
+  )
+)
+2023-05-15 21:54:47,386 - block_trainer.py[183] - INFO: start block training...
+2023-05-15 21:57:12,390 - block_trainer.py[357] - INFO: epoch 0 (145.004404s, 30 blocks still need training), blocks loss: 
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-0 | 0.01252937 | 0.01088646 | 0.00904936 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-1 | 0.61330434 | 0.65394976 | 0.76786741 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-2 | 0.94385660 | 0.94495838 | 0.94305017 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-3 | 0.19739157 | 0.22494652 | 0.27767228 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-4 | 0.96261524 | 0.96302585 | 0.95362860 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-5 | 0.15091934 | 0.16658342 | 0.20295550 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-6 | 0.96882934 | 0.96929160 | 0.96585563 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-7 | 0.11091766 | 0.11838427 | 0.13957027 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-8 | 0.97140039 | 0.97171548 | 0.97038764 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
++---------+------------+------------+------------+
+|         |    0.0     |    0.4     |    0.8     |
++---------+------------+------------+------------+
+| block-9 | 0.07222224 | 0.05243900 | 0.02315278 |
+|         |    (-)     |    (-)     |    (-)     |
++---------+------------+------------+------------+
+
+2023-05-15 21:59:39,395 - block_trainer.py[357] - INFO: epoch 1 (147.004755s, 30 blocks still need training), blocks loss: 
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-0 |   0.00200334   |   0.00203301   |   0.00214128   |
+|         | (↓ 0.01052603) | (↓ 0.00885344) | (↓ 0.00690807) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.41760505   |   0.43435161   |   0.49155842   |
+|         | (↓ 0.19569929) | (↓ 0.21959815) | (↓ 0.27630899) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.89172951   |   0.89216572   |   0.78782940   |
+|         | (↓ 0.05212709) | (↓ 0.05279265) | (↓ 0.15522077) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.04527216   |   0.05138490   |   0.06504568   |
+|         | (↓ 0.15211940) | (↓ 0.17356162) | (↓ 0.21262660) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.91027290   |   0.91044505   |   0.91272588   |
+|         | (↓ 0.05234234) | (↓ 0.05258080) | (↓ 0.04090272) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.02890180   |   0.03304111   |   0.04235641   |
+|         | (↓ 0.12201754) | (↓ 0.13354231) | (↓ 0.16059909) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.91692414   |   0.91761514   |   0.91859608   |
+|         | (↓ 0.05190520) | (↓ 0.05167646) | (↓ 0.04725955) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.01935391   |   0.02119429   |   0.02486484   |
+|         | (↓ 0.09156374) | (↓ 0.09718998) | (↓ 0.11470542) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.91913409   |   0.91952967   |   0.92035139   |
+|         | (↓ 0.05226630) | (↓ 0.05218582) | (↓ 0.05003625) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00439953   |   0.00389249   |   0.00191976   |
+|         | (↓ 0.06782271) | (↓ 0.04854652) | (↓ 0.02123302) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:02:06,880 - block_trainer.py[357] - INFO: epoch 2 (147.480796s, 30 blocks still need training), blocks loss: 
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-0 |   0.00134475   |   0.00144131   |   0.00176011   |
+|         | (↓ 0.00065859) | (↓ 0.00059171) | (↓ 0.00038117) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.34874926   |   0.36183904   |   0.40387729   |
+|         | (↓ 0.06885578) | (↓ 0.07251257) | (↓ 0.08768113) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.84209397   |   0.84220326   |   0.64835201   |
+|         | (↓ 0.04963553) | (↓ 0.04996246) | (↓ 0.13947739) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.02635646   |   0.03000560   |   0.03939975   |
+|         | (↓ 0.01891570) | (↓ 0.02137930) | (↓ 0.02564594) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.86014074   |   0.86191735   |   0.86595719   |
+|         | (↓ 0.05013216) | (↓ 0.04852770) | (↓ 0.04676869) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.01715361   |   0.01946696   |   0.02568864   |
+|         | (↓ 0.01174819) | (↓ 0.01357415) | (↓ 0.01666777) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.86687426   |   0.86715225   |   0.86863296   |
+|         | (↓ 0.05004988) | (↓ 0.05046289) | (↓ 0.04996312) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.01091998   |   0.01200567   |   0.01412017   |
+|         | (↓ 0.00843394) | (↓ 0.00918862) | (↓ 0.01074467) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.86878260   |   0.86901156   |   0.86998681   |
+|         | (↓ 0.05035148) | (↓ 0.05051811) | (↓ 0.05036458) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00215291   |   0.00184148   |   0.00088623   |
+|         | (↓ 0.00224662) | (↓ 0.00205101) | (↓ 0.00103353) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:04:34,038 - block_trainer.py[357] - INFO: epoch 3 (147.156618s, 30 blocks still need training), blocks loss: 
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-0 |   0.00125323   |   0.00132830   |   0.00164213   |
+|         | (↓ 0.00009152) | (↓ 0.00011301) | (↓ 0.00011798) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.29846832   |   0.30960042   |   0.34580993   |
+|         | (↓ 0.05028094) | (↓ 0.05223862) | (↓ 0.05806736) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.79435706   |   0.79613851   |   0.56483528   |
+|         | (↓ 0.04773691) | (↓ 0.04606475) | (↓ 0.08351673) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.01848323   |   0.02076828   |   0.02733421   |
+|         | (↓ 0.00787323) | (↓ 0.00923733) | (↓ 0.01206554) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.81262138   |   0.81410764   |   0.81771417   |
+|         | (↓ 0.04751937) | (↓ 0.04780971) | (↓ 0.04824302) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.01214373   |   0.01378627   |   0.01821411   |
+|         | (↓ 0.00500988) | (↓ 0.00568070) | (↓ 0.00747452) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.81855878   |   0.81885544   |   0.82025108   |
+|         | (↓ 0.04831548) | (↓ 0.04829681) | (↓ 0.04838187) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00770509   |   0.00839918   |   0.00982656   |
+|         | (↓ 0.00321489) | (↓ 0.00360649) | (↓ 0.00429362) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.82047276   |   0.82068662   |   0.82162825   |
+|         | (↓ 0.04830984) | (↓ 0.04832494) | (↓ 0.04835856) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00144588   |   0.00117041   |   0.00054634   |
+|         | (↓ 0.00070703) | (↓ 0.00067108) | (↓ 0.00033990) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:07:01,481 - block_trainer.py[357] - INFO: epoch 4 (147.443400s, 30 blocks still need training), blocks loss: 
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-0 |   0.00092585   |   0.00104159   |   0.00145366   |
+|         | (↓ 0.00032738) | (↓ 0.00028671) | (↓ 0.00018847) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.25417556   |   0.26432082   |   0.29707103   |
+|         | (↓ 0.04429276) | (↓ 0.04527960) | (↓ 0.04873890) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.74855097   |   0.75282768   |   0.47305464   |
+|         | (↓ 0.04580609) | (↓ 0.04331083) | (↓ 0.09178064) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.01350529   |   0.01504022   |   0.01956247   |
+|         | (↓ 0.00497793) | (↓ 0.00572806) | (↓ 0.00777174) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.76730226   |   0.76794506   |   0.77224916   |
+|         | (↓ 0.04531912) | (↓ 0.04616258) | (↓ 0.04546501) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00882091   |   0.00998788   |   0.01335261   |
+|         | (↓ 0.00332282) | (↓ 0.00379839) | (↓ 0.00486150) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.77223125   |   0.77266615   |   0.77407533   |
+|         | (↓ 0.04632753) | (↓ 0.04618929) | (↓ 0.04617575) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00552412   |   0.00606873   |   0.00707659   |
+|         | (↓ 0.00218097) | (↓ 0.00233045) | (↓ 0.00274996) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.77416773   |   0.77439159   |   0.77527366   |
+|         | (↓ 0.04630503) | (↓ 0.04629503) | (↓ 0.04635459) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00102495   |   0.00081760   |   0.00037425   |
+|         | (↓ 0.00042093) | (↓ 0.00035280) | (↓ 0.00017209) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:09:28,980 - block_trainer.py[357] - INFO: epoch 5 (147.498173s, 30 blocks still need training), blocks loss: 
++---------+-----------------+-----------------+----------------+
+|         |       0.0       |       0.4       |      0.8       |
++---------+-----------------+-----------------+----------------+
+| block-0 |    0.00111709   |    0.00111287   |   0.00138395   |
+|         | (↓ -0.00019124) | (↓ -0.00007127) | (↓ 0.00006971) |
++---------+-----------------+-----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.21944146   |   0.22897725   |   0.25977464   |
+|         | (↓ 0.03473411) | (↓ 0.03534358) | (↓ 0.03729639) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.70511679   |   0.70896573   |   0.42925050   |
+|         | (↓ 0.04343418) | (↓ 0.04386195) | (↓ 0.04380415) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.01076781   |   0.01183498   |   0.01516662   |
+|         | (↓ 0.00273748) | (↓ 0.00320524) | (↓ 0.00439585) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.72311718   |   0.72401622   |   0.72758160   |
+|         | (↓ 0.04418508) | (↓ 0.04392883) | (↓ 0.04466757) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00710036   |   0.00800140   |   0.01076190   |
+|         | (↓ 0.00172055) | (↓ 0.00198648) | (↓ 0.00259071) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.72794831   |   0.72824558   |   0.72961269   |
+|         | (↓ 0.04428294) | (↓ 0.04442056) | (↓ 0.04446264) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00440951   |   0.00480224   |   0.00556450   |
+|         | (↓ 0.00111461) | (↓ 0.00126648) | (↓ 0.00151209) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.72979261   |   0.72993482   |   0.73088689   |
+|         | (↓ 0.04437513) | (↓ 0.04445677) | (↓ 0.04438676) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00079740   |   0.00062559   |   0.00028367   |
+|         | (↓ 0.00022755) | (↓ 0.00019201) | (↓ 0.00009058) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:11:56,529 - block_trainer.py[357] - INFO: epoch 6 (147.548096s, 30 blocks still need training), blocks loss: 
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-0 |   0.00091385   |   0.00096328   |   0.00128411   |
+|         | (↓ 0.00020324) | (↓ 0.00014958) | (↓ 0.00009984) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.19079179   |   0.20021959   |   0.22960943   |
+|         | (↓ 0.02864966) | (↓ 0.02875766) | (↓ 0.03016521) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.66337901   |   0.66698830   |   0.39536554   |
+|         | (↓ 0.04173778) | (↓ 0.04197743) | (↓ 0.03388496) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.00926499   |   0.01013263   |   0.01272438   |
+|         | (↓ 0.00150281) | (↓ 0.00170235) | (↓ 0.00244224) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.68101159   |   0.68153581   |   0.68469604   |
+|         | (↓ 0.04210559) | (↓ 0.04248041) | (↓ 0.04288555) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00608517   |   0.00686993   |   0.00931809   |
+|         | (↓ 0.00101520) | (↓ 0.00113147) | (↓ 0.00144380) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.68559762   |   0.68579136   |   0.68687383   |
+|         | (↓ 0.04235068) | (↓ 0.04245422) | (↓ 0.04273885) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00382088   |   0.00413491   |   0.00476545   |
+|         | (↓ 0.00058863) | (↓ 0.00066734) | (↓ 0.00079906) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.68734811   |   0.68741603   |   0.68838941   |
+|         | (↓ 0.04244450) | (↓ 0.04251879) | (↓ 0.04249748) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00066186   |   0.00051911   |   0.00023640   |
+|         | (↓ 0.00013555) | (↓ 0.00010648) | (↓ 0.00004727) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:14:23,810 - block_trainer.py[357] - INFO: epoch 7 (147.281137s, 30 blocks still need training), blocks loss: 
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-0 |   0.00079729   |   0.00087044   |   0.00118850   |
+|         | (↓ 0.00011656) | (↓ 0.00009284) | (↓ 0.00009561) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.16288231   |   0.17190019   |   0.19957676   |
+|         | (↓ 0.02790948) | (↓ 0.02831940) | (↓ 0.03003267) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.62383384   |   0.62751032   |   0.36583107   |
+|         | (↓ 0.03954517) | (↓ 0.03947798) | (↓ 0.02953447) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.00767783   |   0.00838644   |   0.01045569   |
+|         | (↓ 0.00158717) | (↓ 0.00174619) | (↓ 0.00226869) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.64069991   |   0.64111620   |   0.64401755   |
+|         | (↓ 0.04031168) | (↓ 0.04041961) | (↓ 0.04067850) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00502658   |   0.00563839   |   0.00764393   |
+|         | (↓ 0.00105859) | (↓ 0.00123153) | (↓ 0.00167416) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.64494399   |   0.64519093   |   0.64604788   |
+|         | (↓ 0.04065363) | (↓ 0.04060043) | (↓ 0.04082595) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00318004   |   0.00344883   |   0.00395157   |
+|         | (↓ 0.00064084) | (↓ 0.00068607) | (↓ 0.00081387) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.64666377   |   0.64679328   |   0.64767395   |
+|         | (↓ 0.04068434) | (↓ 0.04062275) | (↓ 0.04071545) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00054036   |   0.00042026   |   0.00019321   |
+|         | (↓ 0.00012150) | (↓ 0.00009886) | (↓ 0.00004319) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:16:51,025 - block_trainer.py[357] - INFO: epoch 8 (147.214067s, 30 blocks still need training), blocks loss: 
++---------+----------------+-----------------+----------------+
+|         |      0.0       |       0.4       |      0.8       |
++---------+----------------+-----------------+----------------+
+| block-0 |   0.00077895   |    0.00087055   |   0.00118076   |
+|         | (↓ 0.00001833) | (↓ -0.00000011) | (↓ 0.00000774) |
++---------+----------------+-----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.14062537   |   0.14939814   |   0.17607302   |
+|         | (↓ 0.02225694) | (↓ 0.02250206) | (↓ 0.02350374) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.58572069   |   0.58944544   |   0.31916975   |
+|         | (↓ 0.03811315) | (↓ 0.03806489) | (↓ 0.04666132) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.00657291   |   0.00716450   |   0.00884466   |
+|         | (↓ 0.00110492) | (↓ 0.00122193) | (↓ 0.00161103) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.60205739   |   0.60218980   |   0.60506198   |
+|         | (↓ 0.03864252) | (↓ 0.03892641) | (↓ 0.03895556) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00429894   |   0.00482414   |   0.00648885   |
+|         | (↓ 0.00072765) | (↓ 0.00081425) | (↓ 0.00115508) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.60611233   |   0.60628881   |   0.60735129   |
+|         | (↓ 0.03883166) | (↓ 0.03890212) | (↓ 0.03869659) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00271364   |   0.00292971   |   0.00336858   |
+|         | (↓ 0.00046640) | (↓ 0.00051912) | (↓ 0.00058299) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.60780266   |   0.60797778   |   0.60874162   |
+|         | (↓ 0.03886111) | (↓ 0.03881551) | (↓ 0.03893234) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00046131   |   0.00035915   |   0.00016838   |
+|         | (↓ 0.00007904) | (↓ 0.00006110) | (↓ 0.00002483) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:19:18,272 - block_trainer.py[357] - INFO: epoch 9 (147.247394s, 30 blocks still need training), blocks loss: 
++---------+-----------------+-----------------+-----------------+
+|         |       0.0       |       0.4       |       0.8       |
++---------+-----------------+-----------------+-----------------+
+| block-0 |    0.00082208   |    0.00090158   |    0.00119786   |
+|         | (↓ -0.00004312) | (↓ -0.00003103) | (↓ -0.00001709) |
++---------+-----------------+-----------------+-----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.12101712   |   0.12958543   |   0.15527136   |
+|         | (↓ 0.01960825) | (↓ 0.01981271) | (↓ 0.02080166) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.54983511   |   0.55164781   |   0.27692337   |
+|         | (↓ 0.03588558) | (↓ 0.03779763) | (↓ 0.04224638) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.00569662   |   0.00618772   |   0.00759212   |
+|         | (↓ 0.00087628) | (↓ 0.00097678) | (↓ 0.00125254) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.56475934   |   0.56530789   |   0.56795133   |
+|         | (↓ 0.03729805) | (↓ 0.03688190) | (↓ 0.03711066) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00375493   |   0.00419387   |   0.00558349   |
+|         | (↓ 0.00054401) | (↓ 0.00063028) | (↓ 0.00090535) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.56895460   |   0.56909435   |   0.57029020   |
+|         | (↓ 0.03715773) | (↓ 0.03719446) | (↓ 0.03706109) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00237763   |   0.00256027   |   0.00293447   |
+|         | (↓ 0.00033601) | (↓ 0.00036944) | (↓ 0.00043411) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.57059173   |   0.57083800   |   0.57150388   |
+|         | (↓ 0.03721093) | (↓ 0.03713978) | (↓ 0.03723774) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00040396   |   0.00031380   |   0.00014668   |
+|         | (↓ 0.00005736) | (↓ 0.00004535) | (↓ 0.00002170) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:21:45,569 - block_trainer.py[357] - INFO: epoch 10 (147.296097s, 30 blocks still need training), blocks loss: 
++---------+-----------------+-----------------+----------------+
+|         |       0.0       |       0.4       |      0.8       |
++---------+-----------------+-----------------+----------------+
+| block-0 |    0.00092131   |    0.00095233   |   0.00118297   |
+|         | (↓ -0.00009923) | (↓ -0.00005075) | (↓ 0.00001488) |
++---------+-----------------+-----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-1 |   0.10359513   |   0.11210641   |   0.13760881   |
+|         | (↓ 0.01742199) | (↓ 0.01747903) | (↓ 0.01766255) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-2 |   0.51612485   |   0.51780363   |   0.26535880   |
+|         | (↓ 0.03371026) | (↓ 0.03384417) | (↓ 0.01156457) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-3 |   0.00527820   |   0.00574812   |   0.00698423   |
+|         | (↓ 0.00041842) | (↓ 0.00043961) | (↓ 0.00060789) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-4 |   0.52971971   |   0.53021505   |   0.53206012   |
+|         | (↓ 0.03503964) | (↓ 0.03509284) | (↓ 0.03589121) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-5 |   0.00346066   |   0.00387016   |   0.00514312   |
+|         | (↓ 0.00029427) | (↓ 0.00032371) | (↓ 0.00044037) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-6 |   0.53355682   |   0.53373215   |   0.53478638   |
+|         | (↓ 0.03539777) | (↓ 0.03536220) | (↓ 0.03550382) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-7 |   0.00218342   |   0.00234784   |   0.00269454   |
+|         | (↓ 0.00019421) | (↓ 0.00021243) | (↓ 0.00023993) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-8 |   0.53510288   |   0.53519331   |   0.53584063   |
+|         | (↓ 0.03548885) | (↓ 0.03564469) | (↓ 0.03566325) |
++---------+----------------+----------------+----------------+
++---------+----------------+----------------+----------------+
+|         |      0.0       |      0.4       |      0.8       |
++---------+----------------+----------------+----------------+
+| block-9 |   0.00035470   |   0.00027240   |   0.00012829   |
+|         | (↓ 0.00004926) | (↓ 0.00004140) | (↓ 0.00001838) |
++---------+----------------+----------------+----------------+
+
+2023-05-15 22:21:45,665 - server_block_profiler.py[193] - INFO: raw block info: {"index": 0, "id": "block-0", "size": 135422, "FLOPs": 7507804160.0, "param": 28640.0, "input_size": [3, 512, 1024], "output_size": [64, 256, 512]}
+2023-05-15 22:21:45,753 - server_block_profiler.py[193] - INFO: raw block info: {"index": 1, "id": "block-1", "size": 320114, "FLOPs": 4882169856.0, "param": 74112.0, "input_size": [64, 256, 512], "output_size": [64, 128, 256]}
+2023-05-15 22:21:45,787 - server_block_profiler.py[193] - INFO: raw block info: {"index": 2, "id": "block-2", "size": 317185, "FLOPs": 4848615424.0, "param": 73984.0, "input_size": [64, 128, 256], "output_size": [64, 128, 256]}
+2023-05-15 22:21:45,821 - server_block_profiler.py[193] - INFO: raw block info: {"index": 3, "id": "block-3", "size": 946351, "FLOPs": 3770679296.0, "param": 230144.0, "input_size": [64, 128, 256], "output_size": [128, 64, 128]}
+2023-05-15 22:21:45,848 - server_block_profiler.py[193] - INFO: raw block info: {"index": 4, "id": "block-4", "size": 1203969, "FLOPs": 4840226816.0, "param": 295424.0, "input_size": [128, 64, 128], "output_size": [128, 64, 128]}
+2023-05-15 22:21:45,879 - server_block_profiler.py[193] - INFO: raw block info: {"index": 5, "id": "block-5", "size": 3705071, "FLOPs": 15057551360.0, "param": 919040.0, "input_size": [128, 64, 128], "output_size": [256, 64, 128]}
+2023-05-15 22:21:45,918 - server_block_profiler.py[193] - INFO: raw block info: {"index": 6, "id": "block-6", "size": 4747009, "FLOPs": 19344130048.0, "param": 1180672.0, "input_size": [256, 64, 128], "output_size": [256, 64, 128]}
+2023-05-15 22:21:45,973 - server_block_profiler.py[193] - INFO: raw block info: {"index": 7, "id": "block-7", "size": 14727407, "FLOPs": 60179873792.0, "param": 3673088.0, "input_size": [256, 64, 128], "output_size": [512, 64, 128]}
+2023-05-15 22:21:46,050 - server_block_profiler.py[193] - INFO: raw block info: {"index": 8, "id": "block-8", "size": 18910977, "FLOPs": 77342965760.0, "param": 4720640.0, "input_size": [512, 64, 128], "output_size": [512, 64, 128]}
+2023-05-15 22:21:46,106 - server_block_profiler.py[193] - INFO: raw block info: {"index": 9, "id": "block-9", "size": 5923838, "FLOPs": 24167579648.0, "param": 1475072.0, "input_size": [512, 64, 128], "output_size": [128, 64, 128]}
+2023-05-15 22:22:25,959 - server_block_profiler.py[264] - INFO: profile blocks acc drop
+2023-05-15 22:25:35,790 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:26:11,960 - server_block_profiler.py[70] - INFO: get -1-0-0-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:26:48,379 - server_block_profiler.py[70] - INFO: get -1-8-8-8-8-8-8-8-8-8 metrics in cache
+2023-05-15 22:27:11,287 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:27:47,375 - server_block_profiler.py[70] - INFO: get -1-0-0-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:28:22,564 - server_block_profiler.py[70] - INFO: get -1-8-8-8-8-8-8-8-8-8 metrics in cache
+2023-05-15 22:28:45,257 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:29:58,219 - server_block_profiler.py[70] - INFO: get 0-0-0-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:30:45,304 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:31:21,814 - server_block_profiler.py[70] - INFO: get 0--1-0-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:31:57,470 - server_block_profiler.py[70] - INFO: get 8--1-8-8-8-8-8-8-8-8 metrics in cache
+2023-05-15 22:32:20,756 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:32:57,863 - server_block_profiler.py[70] - INFO: get 0--1-0-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:33:38,403 - server_block_profiler.py[70] - INFO: get 8--1-8-8-8-8-8-8-8-8 metrics in cache
+2023-05-15 22:33:38,403 - server_block_profiler.py[70] - INFO: get 8-8-8-8-8-8-8-8-8-8 metrics in cache
+2023-05-15 22:33:38,403 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:35:32,075 - server_block_profiler.py[70] - INFO: get 0-0-0-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:36:59,362 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:37:50,585 - server_block_profiler.py[70] - INFO: get 0-0--1-0-0-0-0-0-0-0 metrics in cache
+2023-05-15 22:38:45,480 - server_block_profiler.py[70] - INFO: get 8-8--1-8-8-8-8-8-8-8 metrics in cache
+2023-05-15 22:39:22,068 - server_block_profiler.py[70] - INFO: get -1--1--1--1--1--1--1--1--1--1 metrics in cache
+2023-05-15 22:40:22,452 - server_block_profiler.py[70] - INFO: get 0-0--1-0-0-0-0-0-0-0 metrics in cache

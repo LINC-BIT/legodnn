@@ -1,0 +1,245 @@
+2021-11-01 14:51:10,347 - log.py[38] - DEBUG: entry file content: ---------------------------------
+2021-11-01 14:51:10,347 - log.py[39] - DEBUG: 
+from legodnn.block_detection.model_topology_extraction import LegoDNNGraph, LegoDNNNode
+import queue
+from typing import List
+
+class BlockDetection:
+    def __init__(self, graph: LegoDNNGraph, min_compress_num=2, max_compress_num=4) -> None:
+        self.graph = graph
+        self.blocks = [] # list[list]结构，或者说list[block]，block = list[int]，每个块是块中包含的module和func在graph中的serial_number
+        self.blocks_start_node_is_placeholder = [] # 记录一个块中的开始节点是否为占位符，占位符的意思是该块的开始节点是其它块的终止节点，那么该块的开始节点中的操作就不再进行，如果为0则不是，如果为1则是占位符
+        self.blocks_start_node_hook = [] # 记录每个块的输入应该钩哪个节点
+        self.blocks_start_node_hook_input_or_ouput = []  # 记录钩输入还是输出，如果为0则钩输入，如果为1则钩输出
+        self.blocks_end_node_hook = []  # 记录每个块的输入应该钩哪个节点
+        self.blocks_end_node_hook_input_or_ouput = []  # 记录钩输入还是输出，如果为0则钩输入，如果为1则钩输出
+
+        # 子图约束3的条件
+        self.min_compress_num = min_compress_num  # 一个块中最少的可压缩层
+        self.max_compress_num = max_compress_num  # 一个块中最多的可压缩层
+        pass
+    
+    def _adjust_is_subgraph(self, block: List[int]):
+        # 判断是否只有一个开始节点和一个终止节点子图，则仅需要判断是否只有一个节点的前节点不在当前block中，只有一个节点的后节点不在当前block中
+        start_node_list = []
+        end_node_list = []
+        for node_order in block:
+            node = self.graph.order_to_node[node_order]
+
+            # 判断是否为输入节点
+            if len(node.pre_nodes)==0:
+                start_node_list.append(node_order)
+            else:
+                for name, pre_node in node.pre_nodes.items():
+                    serial_number = pre_node.serial_number
+                    if serial_number==-1 or serial_number not in block:
+                        start_node_list.append(node_order)
+                        break
+
+            # 判断是否为输出节点
+            if len(node.next_nodes)==0:
+                end_node_list.append(node_order)
+            else:
+                for name, next_node in node.next_nodes.items():
+                    serial_number = next_node.serial_number
+                    if serial_number==-1 or serial_number not in block:
+                        end_node_list.append(node_order)
+                        break
+            
+            # 有多个输入节点和多个输出节点，就不是一个块
+            if len(start_node_list)>1 or len(end_node_list)>1:
+                return False
+
+        if len(start_node_list)==1 and len(end_node_list)==1:
+            # 开始节点是编号最小的节点,终止节点是编号最大的节点
+            if start_node_list[0]==min(block) and end_node_list[0]==max(block):
+                return True
+             
+        return False
+    
+    def _adjust_is_block(self, block: List[int]):
+
+        # 如果输入节点是可压缩层且是其它块的输出节点，则不计算
+        start_index = 0
+        start_order = block[start_index]
+        start_node = self.graph.order_to_node[start_order]
+        if start_node.get_op_type() in ['Conv2d', 'Linear', 'ConvTranspose2d']:
+            for other_block in self.blocks:
+                if start_order in other_block:
+                    start_index = start_index + 1
+
+        compress_num = 0
+        for node_order in block[start_index:]:
+            node = self.graph.order_to_node[node_order]
+            if node.get_op_type() in ['Conv2d', 'Linear', 'ConvTranspose2d']:
+                compress_num = compress_num + 1
+        # return compress_num
+        if compress_num >= self.min_compress_num and compress_num <= self.max_compress_num:
+            return True
+        else:
+            return False
+    
+    def _adjust_block_hook_node_input_and_output(self, block: List[int], start_node_is_placeholder: bool):
+        # 判断当前划分出的块的输入输出能否被勾出，且找到需要勾出的块
+        start_node_hook = -1
+        start_node_hook_input_or_ouput = -1
+        end_node_hook = -1
+        end_node_hook_input_or_output = -1
+
+        print(start_node_is_placeholder)
+
+        # 查找如何勾出块的输入
+        if start_node_is_placeholder:
+            if self.graph.order_to_node[block[0]].get_type() == 'module':
+                start_node_hook = block[0]
+                start_node_hook_input_or_ouput = 1
+            else:
+                next_nodes = self.graph.order_to_node[block[0]].next_nodes
+                for name, next_node in next_nodes.items():
+                    if next_node.get_type()=='module':
+                        start_node_hook = next_node.serial_number
+                        start_node_hook_input_or_ouput = 0
+        else:
+            if self.graph.order_to_node[block[0]].get_type() == 'module':
+                start_node_hook = block[0]
+                start_node_hook_input_or_ouput = 0
+            else:
+                pre_nodes = self.graph.order_to_node[block[0]].pre_nodes
+                for name, pre_node in pre_nodes.items():
+                    if pre_node.get_type()=='module':
+                        start_node_hook = pre_node.serial_number
+                        start_node_hook_input_or_ouput = 1
+
+        # 查找如何勾出块的输出
+        if self.graph.order_to_node[block[-1]].get_type() == 'module':
+            end_node_hook = block[-1]
+            end_node_hook_input_or_output = 1
+        else:
+            next_nodes = self.graph.order_to_node[block[-1]].next_nodes
+            for name, next_node in next_nodes.items():
+                if next_node.get_type()=='module':
+                    end_node_hook = next_node.serial_number
+                    end_node_hook_input_or_output = 0
+        out = (start_node_hook, start_node_hook_input_or_ouput, end_node_hook, end_node_hook_input_or_output)
+        print("块的输入输出 {}".format(out))
+        return out
+
+    def _adjust_start_node_is_placeholder(self, node_order):
+        for block in self.blocks:
+            if node_order in block:
+                return True
+        return False
+
+    def detection_all_block(self):
+        for num, node in self.graph.order_to_node.items():
+            assert node.get_type() in ['func', 'module'] # 目前先保证是这两个，如果遇到其它的操作类型再处理
+
+        node_sum = len(self.graph.order_to_node)
+        start_order = 1
+        while(start_order < node_sum):
+            block = []
+            node_order = start_order
+            find_block_flag = False
+            block.append(node_order)
+            
+            node_order = node_order + 1
+
+            while node_order<=node_sum:
+                block.append(node_order)
+
+                # 判断是否为一个子图, 即块的子图约束1
+                is_subgraph = self._adjust_is_subgraph(block)
+            
+                if is_subgraph:
+                    # 判断是否满足块的子图约束3
+                    is_block = self._adjust_is_block(block)
+                else:
+                    is_block = False
+                
+                # 发现一个满足条件的子图
+                if is_subgraph and is_block:
+                    
+                    # 判断开始节点是否为占位符，占位符的意思是该节点是上一个块的输入
+                    start_node_is_placeholder = self._adjust_start_node_is_placeholder(block[0])
+                    # 判断当前子图的输入输出能否被勾出，能则是一个可被训练的块，不能即使满足子图约束条件也丢弃，因为无法实现块的训练。
+                    hook_tuple = self._adjust_block_hook_node_input_and_output(block, start_node_is_placeholder)
+                    # print("块输入输出元组：{}".format(hook_tuple))
+                    assert len(hook_tuple)==4
+                    block_able_train = True
+                    for i in hook_tuple:
+                        if i==-1:
+                            block_able_train=False
+                    
+                    if block_able_train: 
+                        # 当前块能被训练，且钩出当前块输入输出的节点
+                        self.blocks_start_node_is_placeholder.append(start_node_is_placeholder)
+                        self.blocks_start_node_hook.append(hook_tuple[0])
+                        self.blocks_start_node_hook_input_or_ouput.append(hook_tuple[1])
+                        self.blocks_end_node_hook.append(hook_tuple[2])
+                        self.blocks_end_node_hook_input_or_ouput.append(hook_tuple[3])
+
+                        find_block_flag = True
+                        break
+
+                # 未发现满足条件的子图且还有节点未遍历
+                node_order = node_order + 1
+            
+            if find_block_flag: # 找到一个块，从该块的结束节点开始遍历
+                self.blocks.append(block)
+                start_order = node_order
+            else:
+                start_order = start_order + 1 # 未找到块，则从当前节点的下一个节点开始遍历
+    
+    def print_blocks(self):
+        assert len(self.blocks) == len(self.blocks_start_node_hook) == len(self.blocks_start_node_hook_input_or_ouput) == len(self.blocks_end_node_hook) == len(self.blocks_end_node_hook_input_or_ouput)
+        num = 1
+        for i, block in enumerate(self.blocks):
+            print("第{}个块: ".format(num))
+            if self.blocks_start_node_is_placeholder[i]:
+                print("开始节点是占位符")
+            else:
+                print("开始节点不是占位符")
+
+            if self.blocks_start_node_hook_input_or_ouput[i]==0:
+                print("当前块的输入：{}的输入".format(self.graph.order_to_node[self.blocks_start_node_hook[i]].get_name()))
+            else:
+                print("当前块的输入：{}的输出".format(self.graph.order_to_node[self.blocks_start_node_hook[i]].get_name()))
+
+            if self.blocks_end_node_hook_input_or_ouput[i]==0:
+                print("当前块的输出：{}的输入".format(self.graph.order_to_node[self.blocks_end_node_hook[i]].get_name()))
+            else:
+                print("当前块的输出：{}的输出".format(self.graph.order_to_node[self.blocks_end_node_hook[i]].get_name()))
+
+            for order in block:
+                print("层的编号：{}, 层的名字：{}".format(self.graph.order_to_node[order].serial_number, self.graph.order_to_node[order].get_name()))
+            num = num + 1
+
+if __name__=='__main__':
+    from torchvision.models import resnet18, resnet152
+    import torch
+    from legodnn.third_party.nni_new.common.graph_utils import build_graph, build_module_graph
+
+    # net = resnet152().cuda()
+    
+    # data = torch.ones(1, 3, 224, 224).cuda()
+    from cv_task.image_classification.cifar.models import inceptionv3
+    net = inceptionv3().cuda()
+    data = torch.ones(1, 3, 32, 32).cuda()
+
+    print(net)
+    # 通过nni建图
+    module_graph = build_module_graph(net, data)
+    name_to_node = module_graph.name_to_node  # dict
+    input_to_node = module_graph.input_to_node  # defaultdict
+    output_to_node = module_graph.output_to_node  # dict
+
+    graph = LegoDNNGraph()
+    graph.build_graph(name_to_node, input_to_node, output_to_node)
+    
+    block_detection = BlockDetection(graph, min_compress_num=4, max_compress_num=6)
+    block_detection.detection_all_block()
+    print(block_detection.blocks)
+    block_detection.print_blocks()
+    # graph.show_graph()
+
+2021-11-01 14:51:10,347 - log.py[40] - DEBUG: entry file content: ---------------------------------
