@@ -20,7 +20,7 @@ from legodnn.utils.dl.common.model import get_module, set_module, get_model_size
 from cv_task.datasets.image_classification.cifar_dataloader import CIFAR10Dataloader, CIFAR100Dataloader
 from cv_task.image_classification.cifar.models import resnet18
 from cv_task.image_classification.cifar.legodnn_configs import get_cifar100_train_config_200e
-from cv_task.image_classification.class_tools import train_model, test_model
+
 
 if __name__ == '__main__':
     cv_task = 'image_classification'
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     block_training_max_epoch = 65
     test_sample_num = 100
     
-    checkpoint = 'data/models/resnet18/2021-10-20/22-09-22/resnet18.pth'
+    checkpoint = None
     teacher_model = resnet18(num_classes=100).to(device)
     teacher_model.load_state_dict(torch.load(checkpoint)['net'])
 

@@ -20,7 +20,7 @@ from legodnn.utils.dl.common.model import get_module, set_module, get_model_size
 from cv_task.datasets.image_classification.cifar_dataloader import CIFAR10Dataloader, CIFAR100Dataloader
 from cv_task.image_classification.cifar.models import inceptionv3
 from cv_task.image_classification.cifar.legodnn_configs import get_cifar100_train_config_200e
-from cv_task.image_classification.class_tools import train_model, test_model
+
 
 if __name__ == '__main__':
     cv_task = 'image_classification'
