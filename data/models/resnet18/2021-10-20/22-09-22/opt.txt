@@ -1,1 +1,0 @@
-Namespace(dataset='cifar100', epoch=400, lr=0.1, model='resnet18', num_workers=8, root_path='./cv_task_model/image_classification', test_batchsize=128, train_batchsize=128, wd=0.0005)
