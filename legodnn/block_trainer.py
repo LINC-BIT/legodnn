@@ -25,7 +25,7 @@ class _BlockPack:
         self.block_file_path = block_file_path
         self.optimizer = optimizer
 
-        self.best_loss = 1e4
+        self.best_loss = 1e9
         self.last_loss = 0.0
         self.cur_loss = 0.0
         self.losses_record = []

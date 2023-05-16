@@ -1,1 +1,6 @@
 results
+data
+tmp*
+logs
+log
+__pycache__
