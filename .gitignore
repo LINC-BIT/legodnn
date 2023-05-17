@@ -3,3 +3,4 @@ tmp*
 logs
 log
 __pycache__
+git-token.txt

@@ -18,7 +18,6 @@ certifi==2021.5.30
 cffi==1.15.0
 charset-normalizer==2.0.6
 chumpy==0.70
-cityscapesScripts @ file:///data/xgf/domain_adaptation_githubcode/deeplabv3-master/cityscapesScripts
 click==7.1.2
 cloudpickle==2.0.0
 colorama==0.4.4
@@ -36,7 +35,6 @@ defusedxml==0.7.1
 distlib==0.3.6
 dlutils==0.0.12
 docker-pycreds==0.4.0
-edgescaler @ file:///data/gxy/edgescaler-CLI
 einops==0.3.2
 entrypoints==0.3
 filelock==3.4.1
