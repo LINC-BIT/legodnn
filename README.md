@@ -289,6 +289,10 @@ pulp_solver=pulp.COIN_CMD(path="/usr/bin/cbc",msg=False, gapAbs=0)
   
 
 
+https://github.com/LINC-BIT/legodnn/assets/73862727/7b4801d7-b7be-4441-b89d-9e1c83e5d641
+
+
+
 
 
 ### 3.2 How to implement new models in LegoDNN
